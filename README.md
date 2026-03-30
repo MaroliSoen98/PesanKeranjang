@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Kue Cina Order App
 
 Aplikasi Flutter Web sederhana untuk mencatat orderan kue cina.
@@ -36,3 +37,7 @@ flutter run -d chrome
 ```
 
 Kalau `flutter create .` menimpa `lib/main.dart`, cukup paste lagi isi file `lib/main.dart` dari bundle ini.
+=======
+# PesanKeranjang
+Sebuah aplikasi untuk memudahkan pencatatan orderan kue keranjang, dilengkapi dengan filter tanggal, list orderan yang masuk, cek status serta upload dan download catatan yang sudah pernah dibuat ke dalam format XLSX
+>>>>>>> 39f62ac81823a9a940784f8fb23e0ad72a0b797b
