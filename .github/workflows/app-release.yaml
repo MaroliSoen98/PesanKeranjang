@@ -1,49 +1,50 @@
-name: Build Flutter APK
+name: Build and Release Flutter APK
 
-# Pipeline ini akan berjalan setiap ada 'push' ke branch 'main'
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+
+# PENTING: Berikan izin ke GitHub Actions untuk membuat Rilis
+permissions:
+  contents: write
 
 jobs:
   build:
-    name: Build APK
-    # Menggunakan server Ubuntu terbaru dari GitHub
+    name: Build & Release APK
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Mengambil kode dari repository-mu
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Setup Java (Dibutuhkan untuk build Android)
       - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
           java-version: '17'
 
-      # 3. Setup Flutter SDK
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
 
-      # 4. Mengunduh semua dependency Flutter
       - name: Get Dependencies
         run: flutter pub get
 
-      # 5. Proses build APK
       - name: Build APK Release
         run: flutter build apk --release
 
-      # 6. Mengunggah hasil APK supaya bisa kamu download
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
+      # Langkah baru: Membuat Release dan melampirkan APK
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: release-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
+          # Membuat penamaan versi otomatis (contoh: v1.0.1, v1.0.2)
+          tag_name: v1.0.${{ github.run_number }}
+          name: PesanKeranjang v1.0.${{ github.run_number }}
+          body: "Rilis otomatis APK terbaru dari branch main."
+          # Path file APK yang akan dilampirkan
+          files: build/app/outputs/flutter-apk/app-release.apk
+        env:
+          # Token rahasia bawaan GitHub untuk otorisasi
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
