@@ -1,6 +1,4 @@
-import 'dart:html' as html;
 import 'dart:typed_data';
-
 import 'package:excel/excel.dart' as excel;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -82,7 +80,6 @@ class _OrderPageState extends State<OrderPage> {
   final List<OrderItem> _orders = [];
 
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy', 'id_ID');
-  final DateFormat _fileDateFormat = DateFormat('yyyyMMdd_HHmmss', 'id_ID');
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'id_ID',
     symbol: 'Rp',
@@ -685,10 +682,12 @@ class _OrderPageState extends State<OrderPage> {
 
       for (int col = 0; col < headers.length; col++) {
         sheet
-            .cell(excel.CellIndex.indexByColumnRow(
-              columnIndex: col,
-              rowIndex: 0,
-            ))
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: col,
+                rowIndex: 0,
+              ),
+            )
             .value = excel.TextCellValue(headers[col]);
       }
 
@@ -697,45 +696,57 @@ class _OrderPageState extends State<OrderPage> {
         final dataRow = row + 1;
 
         sheet
-            .cell(excel.CellIndex.indexByColumnRow(
-              columnIndex: 0,
-              rowIndex: dataRow,
-            ))
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 0,
+                rowIndex: dataRow,
+              ),
+            )
             .value = excel.TextCellValue(item.customerName);
 
         sheet
-            .cell(excel.CellIndex.indexByColumnRow(
-              columnIndex: 1,
-              rowIndex: dataRow,
-            ))
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 1,
+                rowIndex: dataRow,
+              ),
+            )
             .value = excel.TextCellValue(OrderItem.toIsoDate(item.orderDate));
 
         sheet
-            .cell(excel.CellIndex.indexByColumnRow(
-              columnIndex: 2,
-              rowIndex: dataRow,
-            ))
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 2,
+                rowIndex: dataRow,
+              ),
+            )
             .value = excel.TextCellValue(OrderItem.toIsoDate(item.pickupDate));
 
         sheet
-            .cell(excel.CellIndex.indexByColumnRow(
-              columnIndex: 3,
-              rowIndex: dataRow,
-            ))
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 3,
+                rowIndex: dataRow,
+              ),
+            )
             .value = excel.DoubleCellValue(item.weightKg);
 
         sheet
-            .cell(excel.CellIndex.indexByColumnRow(
-              columnIndex: 4,
-              rowIndex: dataRow,
-            ))
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 4,
+                rowIndex: dataRow,
+              ),
+            )
             .value = excel.TextCellValue(item.isPickedUp ? 'true' : 'false');
 
         sheet
-            .cell(excel.CellIndex.indexByColumnRow(
-              columnIndex: 5,
-              rowIndex: dataRow,
-            ))
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 5,
+                rowIndex: dataRow,
+              ),
+            )
             .value = excel.DoubleCellValue(item.totalPrice);
       }
 
@@ -746,25 +757,17 @@ class _OrderPageState extends State<OrderPage> {
 
       final fileBytes = Uint8List.fromList(encoded);
 
-      final blob = html.Blob(
-        [fileBytes],
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      if (fileBytes.isEmpty) {
+        throw Exception('Data file XLSX kosong.');
+      }
+
+      _showSnackBar(
+        'Fitur download XLSX untuk Android belum diaktifkan. '
+        'Gunakan package seperti path_provider + open_filex, '
+        'file_saver, atau dio untuk simpan file ke perangkat.',
       );
-      final url = html.Url.createObjectUrlFromBlob(blob);
-
-      final anchor = html.AnchorElement(href: url)
-        ..setAttribute(
-          'download',
-          'order_kue_cina_${_fileDateFormat.format(DateTime.now())}.xlsx',
-        )
-        ..click();
-
-      html.Url.revokeObjectUrl(url);
-      anchor.remove();
-
-      _showSnackBar('XLSX berhasil didownload.');
     } catch (e) {
-      _showSnackBar('Gagal download XLSX: $e');
+      _showSnackBar('Gagal menyiapkan XLSX: $e');
     }
   }
 
@@ -808,8 +811,7 @@ class _OrderPageState extends State<OrderPage> {
         continue;
       }
 
-      final customerName =
-          _normalizeCustomerName(_readCell(row, customerIndex));
+      final customerName = _normalizeCustomerName(_readCell(row, customerIndex));
       final orderDate = _parseFlexibleDate(_readCell(row, orderDateIndex));
       final pickupDate = _parseFlexibleDate(_readCell(row, pickupDateIndex));
       final weightKg = _parseFlexibleDouble(_readCell(row, weightIndex));
