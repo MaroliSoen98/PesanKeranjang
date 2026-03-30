@@ -11,7 +11,6 @@ Aplikasi Flutter Web sederhana untuk mencatat orderan kue cina.
 - Status sudah diambil / belum diambil
 - Rekap total bobot order bulan terpilih
 - Rekap total bobot yang belum diambil
-- Harga default kue cina 1 kg = Rp45.000
 - Hitung total harga per order otomatis
 
 ## Cara menjalankan di VS Code
