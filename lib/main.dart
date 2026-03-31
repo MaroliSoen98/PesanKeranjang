@@ -6,6 +6,7 @@ import 'package:excel/excel.dart' as excel;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
@@ -48,22 +49,54 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  String _appVersion = '';
+
   @override
   void initState() {
     super.initState();
-    _navigateToHome();
+    _initializeApp();
   }
 
-  Future<void> _navigateToHome() async {
-    // Simulasi proses loading / inisialisasi selama 2 detik
-    await Future.delayed(const Duration(seconds: 2));
+  Future<void> _initializeApp() async {
+    // 1. Ambil versi aplikasi & data dari SharedPreferences secara bersamaan
+    final (packageInfo, loadedOrders) = await (
+      PackageInfo.fromPlatform(),
+      _loadOrdersFromPrefs(),
+    ).wait;
+
     if (!mounted) return;
-    
+
+    setState(() {
+      _appVersion = 'v${packageInfo.version}';
+    });
+
+    // 2. Beri jeda minimum agar splash screen tidak berkedip jika loading terlalu cepat
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
     // Berpindah ke OrderPage sekaligus menghapus SplashScreen dari back-history
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) => const OrderPage()),
+      MaterialPageRoute(
+        builder: (context) => OrderPage(initialOrders: loadedOrders),
+      ),
     );
+  }
+
+  Future<List<OrderItem>> _loadOrdersFromPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('saved_orders');
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final List<dynamic> decoded = jsonDecode(raw);
+      return decoded
+          .map((item) => OrderItem.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+    } catch (e) {
+      debugPrint('Gagal parse orders dari SharedPreferences: $e');
+      return [];
+    }
   }
 
   @override
@@ -71,21 +104,34 @@ class _SplashScreenState extends State<SplashScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFF8F3), // Sesuai warna latar aplikasi
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Stack(
           children: [
-            Image.asset('assets/icon.png', width: 80, height: 80),
-            const SizedBox(height: 16),
-            const Text(
-              'PesanKeranjang',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.deepOrange,
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Image.asset('assets/icon.png', width: 80, height: 80),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'PesanKeranjang',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.deepOrange,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const CircularProgressIndicator(color: Colors.deepOrange),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            const CircularProgressIndicator(color: Colors.deepOrange),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 32.0),
+                child: Text(_appVersion, style: TextStyle(color: Colors.grey.shade600)),
+              ),
+            ),
           ],
         ),
       ),
@@ -139,7 +185,9 @@ class OrderItem {
 }
 
 class OrderPage extends StatefulWidget {
-  const OrderPage({super.key});
+  final List<OrderItem> initialOrders;
+
+  const OrderPage({super.key, required this.initialOrders});
 
   @override
   State<OrderPage> createState() => _OrderPageState();
@@ -171,8 +219,17 @@ class _OrderPageState extends State<OrderPage> {
   @override
   void initState() {
     super.initState();
+    _orders.addAll(widget.initialOrders);
     _setThisMonth();
-    _loadOrders();
+
+    // Jika ada order yang perlu diingatkan, dialog akan muncul setelah halaman ini selesai dibangun
+    if (_orders.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _checkReminders();
+        }
+      });
+    }
   }
 
   @override
@@ -186,34 +243,6 @@ class _OrderPageState extends State<OrderPage> {
     final prefs = await SharedPreferences.getInstance();
     final jsonList = _orders.map((item) => item.toJson()).toList();
     await prefs.setString(_ordersStorageKey, jsonEncode(jsonList));
-  }
-
-  Future<void> _loadOrders() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_ordersStorageKey);
-
-    if (raw == null || raw.isEmpty) return;
-
-    try {
-      final List<dynamic> decoded = jsonDecode(raw);
-      final loadedOrders = decoded
-          .map((item) => OrderItem.fromJson(Map<String, dynamic>.from(item)))
-          .toList();
-
-      if (!mounted) return;
-      setState(() {
-        _orders
-          ..clear()
-          ..addAll(loadedOrders);
-      });
-
-      // Jalankan pengecekan reminder setelah frame selesai dirender
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _checkReminders();
-      });
-    } catch (e) {
-      debugPrint('Gagal load orders: $e');
-    }
   }
 
   void _checkReminders() {
