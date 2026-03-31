@@ -1,10 +1,10 @@
 {
   "roots": [
-    "PesanKeranjang"
+    "pesan_keranjang"
   ],
   "packages": [
     {
-      "name": "PesanKeranjang",
+      "name": "pesan_keranjang",
       "version": "1.0.0+1",
       "dependencies": [
         "excel",

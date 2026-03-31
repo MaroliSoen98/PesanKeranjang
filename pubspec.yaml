@@ -1,4 +1,4 @@
-name: Pesan Keranjang
+name: pesan_keranjang
 description: Aplikasi pencatatan order kue cina berbasis Flutter Web.
 publish_to: 'none'
 version: 1.0.0+1
@@ -28,7 +28,6 @@ flutter_launcher_icons:
   android: "launcher_icon"
   ios: true
   image_path: "assets/icon.png"
-  min_sdk_android: 21 # optional
   web:
     generate: true
     image_path: "assets/icon.png"
