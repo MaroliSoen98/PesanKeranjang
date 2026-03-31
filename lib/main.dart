@@ -4,6 +4,9 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
+import 'dart:io'; // Tambahkan ini
+import 'package:path_provider/path_provider.dart'; // Tambahkan ini
+import 'package:open_filex/open_filex.dart'; // Tambahkan ini
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -660,7 +663,7 @@ class _OrderPageState extends State<OrderPage> {
     }
   }
 
-  void _downloadXlsx() {
+  Future<void> _downloadXlsx() async { // Ubah menjadi Future<void> dan async
     try {
       final workbook = excel.Excel.createExcel();
       final defaultSheetName = workbook.getDefaultSheet() ?? 'Sheet1';
@@ -696,57 +699,27 @@ class _OrderPageState extends State<OrderPage> {
         final dataRow = row + 1;
 
         sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: 0,
-                rowIndex: dataRow,
-              ),
-            )
+            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: dataRow))
             .value = excel.TextCellValue(item.customerName);
 
         sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: 1,
-                rowIndex: dataRow,
-              ),
-            )
+            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: dataRow))
             .value = excel.TextCellValue(OrderItem.toIsoDate(item.orderDate));
 
         sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: 2,
-                rowIndex: dataRow,
-              ),
-            )
+            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: dataRow))
             .value = excel.TextCellValue(OrderItem.toIsoDate(item.pickupDate));
 
         sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: 3,
-                rowIndex: dataRow,
-              ),
-            )
+            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: dataRow))
             .value = excel.DoubleCellValue(item.weightKg);
 
         sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: 4,
-                rowIndex: dataRow,
-              ),
-            )
+            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: dataRow))
             .value = excel.TextCellValue(item.isPickedUp ? 'true' : 'false');
 
         sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: 5,
-                rowIndex: dataRow,
-              ),
-            )
+            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: dataRow))
             .value = excel.DoubleCellValue(item.totalPrice);
       }
 
@@ -761,11 +734,36 @@ class _OrderPageState extends State<OrderPage> {
         throw Exception('Data file XLSX kosong.');
       }
 
-      _showSnackBar(
-        'Fitur download XLSX untuk Android belum diaktifkan. '
-        'Gunakan package seperti path_provider + open_filex, '
-        'file_saver, atau dio untuk simpan file ke perangkat.',
-      );
+      // --- KODE BARU UNTUK MENYIMPAN DAN MEMBUKA FILE DI ANDROID/IOS ---
+      Directory? directory;
+      if (Platform.isAndroid) {
+        // Menyimpan di folder khusus aplikasi agar tidak perlu izin ribet
+        directory = await getExternalStorageDirectory();
+      } else if (Platform.isIOS) {
+        directory = await getApplicationDocumentsDirectory();
+      }
+
+      if (directory != null) {
+        // Membuat nama file yang unik berdasarkan waktu saat ini
+        final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+        final String filePath = '${directory.path}/Order_Kue_Cina_$timestamp.xlsx';
+        final File file = File(filePath);
+        
+        // Menyimpan data ke file fisik
+        await file.writeAsBytes(fileBytes, flush: true);
+        
+        _showSnackBar('Berhasil! File tersimpan.');
+        
+        // Langsung membuka file menggunakan aplikasi Excel/WPS di HP
+        final result = await OpenFilex.open(filePath);
+        if (result.type != ResultType.done) {
+          _showSnackBar('Berhasil disimpan, tapi gagal membuka: ${result.message}');
+        }
+      } else {
+        _showSnackBar('Gagal mendapatkan folder penyimpanan di HP.');
+      }
+      // -----------------------------------------------------------------
+
     } catch (e) {
       _showSnackBar('Gagal menyiapkan XLSX: $e');
     }
