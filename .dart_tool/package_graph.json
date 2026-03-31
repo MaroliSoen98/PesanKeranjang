@@ -5,7 +5,7 @@
   "packages": [
     {
       "name": "pesan_keranjang",
-      "version": "1.0.0+1",
+      "version": "1.0.0+23",
       "dependencies": [
         "excel",
         "file_picker",
