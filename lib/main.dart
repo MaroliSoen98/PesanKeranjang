@@ -246,16 +246,9 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   void _checkReminders() {
+    final upcomingOrders = _upcomingOrders;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final tomorrow = today.add(const Duration(days: 1));
-
-    final upcomingOrders = _orders.where((o) {
-      if (o.isPickedUp) return false; // Abaikan yang sudah diambil
-      final pickup = DateTime(
-          o.pickupDate.year, o.pickupDate.month, o.pickupDate.day);
-      return pickup == today || pickup == tomorrow;
-    }).toList();
 
     if (upcomingOrders.isEmpty) return; // Jika tidak ada order hari ini/besok, lewati
 
@@ -310,6 +303,22 @@ class _OrderPageState extends State<OrderPage> {
         );
       },
     );
+  }
+
+  List<OrderItem> get _upcomingOrders {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    return _orders.where((o) {
+      if (o.isPickedUp) return false; // Abaikan yang sudah diambil
+      final pickup =
+          DateTime(o.pickupDate.year, o.pickupDate.month, o.pickupDate.day);
+      return pickup.isAtSameMomentAs(today) ||
+          pickup.isAtSameMomentAs(tomorrow);
+    }).toList()
+      // Urutkan berdasarkan tanggal ambil, yang hari ini duluan
+      ..sort((a, b) => a.pickupDate.compareTo(b.pickupDate));
   }
 
   List<OrderItem> get _filteredOrders {
@@ -1544,6 +1553,27 @@ class _OrderPageState extends State<OrderPage> {
         ),
         centerTitle: true,
         actions: [
+          // Tombol lonceng hanya muncul jika ada reminder
+          if (_upcomingOrders.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 4.0),
+              child: Badge(
+                label: Text(_upcomingOrders.length.toString()),
+                child: IconButton(
+                  tooltip: 'Lihat Pengingat',
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            ReminderPage(upcomingOrders: _upcomingOrders),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.notifications_active),
+                ),
+              ),
+            ),
           IconButton(
             tooltip: 'Import Excel',
             onPressed: _importXlsx,
@@ -1584,6 +1614,79 @@ class _OrderPageState extends State<OrderPage> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class ReminderPage extends StatelessWidget {
+  final List<OrderItem> upcomingOrders;
+
+  const ReminderPage({super.key, required this.upcomingOrders});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Daftar Pengingat Pesanan'),
+      ),
+      body: upcomingOrders.isEmpty
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.notifications_off_outlined,
+                      size: 64, color: Colors.grey),
+                  SizedBox(height: 16),
+                  Text(
+                    'Tidak ada pengingat aktif.',
+                    style: TextStyle(fontSize: 16, color: Colors.grey),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: upcomingOrders.length,
+              itemBuilder: (context, index) {
+                final o = upcomingOrders[index];
+                final isToday = DateTime(o.pickupDate.year, o.pickupDate.month,
+                        o.pickupDate.day)
+                    .isAtSameMomentAs(today);
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 1,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(
+                      color: isToday
+                          ? Colors.red.shade100
+                          : Colors.orange.shade100,
+                    ),
+                  ),
+                  child: ListTile(
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                    leading: Icon(
+                      isToday ? Icons.warning_amber_rounded : Icons.schedule,
+                      color: isToday ? Colors.red : Colors.orange,
+                      size: 32,
+                    ),
+                    title: Text(o.customerName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 17)),
+                    subtitle: Text(
+                        isToday ? 'Ambil HARI INI' : 'Ambil BESOK',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    trailing: Text('${o.weightKg} kg',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                );
+              },
+            ),
     );
   }
 }
