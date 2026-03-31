@@ -1,12 +1,12 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:excel/excel.dart' as excel;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
-import 'dart:io'; // Tambahkan ini
-import 'package:path_provider/path_provider.dart'; // Tambahkan ini
-import 'package:open_filex/open_filex.dart'; // Tambahkan ini
+import 'package:path_provider/path_provider.dart';
+import 'package:open_filex/open_filex.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,6 +71,9 @@ class OrderPage extends StatefulWidget {
 }
 
 class _OrderPageState extends State<OrderPage> {
+  // Variabel untuk navigasi Bottom Tab
+  int _selectedIndex = 0;
+
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
 
@@ -102,41 +105,18 @@ class _OrderPageState extends State<OrderPage> {
     super.dispose();
   }
 
+  // --- LOGIKA FILTER & DATA ---
   List<OrderItem> get _filteredOrders {
     return _orders.where((order) {
-      if (_filterStartDate == null || _filterEndDate == null) {
-        return true;
-      }
+      if (_filterStartDate == null || _filterEndDate == null) return true;
 
-      final start = DateTime(
-        _filterStartDate!.year,
-        _filterStartDate!.month,
-        _filterStartDate!.day,
-      );
+      final start = DateTime(_filterStartDate!.year, _filterStartDate!.month, _filterStartDate!.day);
+      final end = DateTime(_filterEndDate!.year, _filterEndDate!.month, _filterEndDate!.day);
+      final orderDateOnly = DateTime(order.orderDate.year, order.orderDate.month, order.orderDate.day);
+      final pickupDateOnly = DateTime(order.pickupDate.year, order.pickupDate.month, order.pickupDate.day);
 
-      final end = DateTime(
-        _filterEndDate!.year,
-        _filterEndDate!.month,
-        _filterEndDate!.day,
-      );
-
-      final orderDateOnly = DateTime(
-        order.orderDate.year,
-        order.orderDate.month,
-        order.orderDate.day,
-      );
-
-      final pickupDateOnly = DateTime(
-        order.pickupDate.year,
-        order.pickupDate.month,
-        order.pickupDate.day,
-      );
-
-      final orderDateMatch =
-          !orderDateOnly.isBefore(start) && !orderDateOnly.isAfter(end);
-
-      final pickupDateMatch =
-          !pickupDateOnly.isBefore(start) && !pickupDateOnly.isAfter(end);
+      final orderDateMatch = !orderDateOnly.isBefore(start) && !orderDateOnly.isAfter(end);
+      final pickupDateMatch = !pickupDateOnly.isBefore(start) && !pickupDateOnly.isAfter(end);
 
       return orderDateMatch && pickupDateMatch;
     }).toList()
@@ -149,54 +129,26 @@ class _OrderPageState extends State<OrderPage> {
 
   Map<String, List<OrderItem>> get _groupedOrders {
     final grouped = <String, List<OrderItem>>{};
-
     for (final item in _filteredOrders) {
       grouped.putIfAbsent(item.customerName, () => []).add(item);
     }
-
     for (final entry in grouped.entries) {
       entry.value.sort((a, b) => a.orderDate.compareTo(b.orderDate));
     }
-
     return grouped;
   }
 
-  double get _totalOrderedWeight {
-    return _filteredOrders.fold(0.0, (sum, item) => sum + item.weightKg);
-  }
+  double get _totalOrderedWeight => _filteredOrders.fold(0.0, (sum, item) => sum + item.weightKg);
+  double get _remainingWeight => _filteredOrders.where((item) => !item.isPickedUp).fold(0.0, (sum, item) => sum + item.weightKg);
+  double get _totalRevenue => _filteredOrders.fold(0.0, (sum, item) => sum + item.totalPrice);
+  int get _totalOrderCount => _filteredOrders.length;
+  int get _totalCustomerCount => _groupedOrders.length;
 
-  double get _remainingWeight {
-    return _filteredOrders
-        .where((item) => !item.isPickedUp)
-        .fold(0.0, (sum, item) => sum + item.weightKg);
-  }
+  double _getTotalWeightPerCustomer(List<OrderItem> items) => items.fold(0.0, (sum, item) => sum + item.weightKg);
+  double _getRemainingWeightPerCustomer(List<OrderItem> items) => items.where((item) => !item.isPickedUp).fold(0.0, (sum, item) => sum + item.weightKg);
+  double _getTotalPricePerCustomer(List<OrderItem> items) => items.fold(0.0, (sum, item) => sum + item.totalPrice);
 
-  double get _totalRevenue {
-    return _filteredOrders.fold(0.0, (sum, item) => sum + item.totalPrice);
-  }
-
-  int get _totalOrderCount {
-    return _filteredOrders.length;
-  }
-
-  int get _totalCustomerCount {
-    return _groupedOrders.length;
-  }
-
-  double _getTotalWeightPerCustomer(List<OrderItem> items) {
-    return items.fold(0.0, (sum, item) => sum + item.weightKg);
-  }
-
-  double _getRemainingWeightPerCustomer(List<OrderItem> items) {
-    return items
-        .where((item) => !item.isPickedUp)
-        .fold(0.0, (sum, item) => sum + item.weightKg);
-  }
-
-  double _getTotalPricePerCustomer(List<OrderItem> items) {
-    return items.fold(0.0, (sum, item) => sum + item.totalPrice);
-  }
-
+  // --- LOGIKA FORM & DATE PICKER ---
   Future<void> _pickDateRange() async {
     DateTime tempStart = _filterStartDate ?? DateTime.now();
     DateTime tempEnd = _filterEndDate ?? DateTime.now();
@@ -208,38 +160,24 @@ class _OrderPageState extends State<OrderPage> {
           builder: (context, setModalState) {
             Future<void> pickStartDate() async {
               final picked = await showDatePicker(
-                context: context,
-                initialDate: tempStart,
-                firstDate: DateTime(2024),
-                lastDate: DateTime(2035),
-                helpText: 'Pilih tanggal awal',
+                context: context, initialDate: tempStart, firstDate: DateTime(2024), lastDate: DateTime(2035), helpText: 'Pilih tanggal awal',
               );
-
               if (picked != null) {
                 setModalState(() {
                   tempStart = picked;
-                  if (tempEnd.isBefore(tempStart)) {
-                    tempEnd = tempStart;
-                  }
+                  if (tempEnd.isBefore(tempStart)) tempEnd = tempStart;
                 });
               }
             }
 
             Future<void> pickEndDate() async {
               final picked = await showDatePicker(
-                context: context,
-                initialDate: tempEnd,
-                firstDate: DateTime(2024),
-                lastDate: DateTime(2035),
-                helpText: 'Pilih tanggal akhir',
+                context: context, initialDate: tempEnd, firstDate: DateTime(2024), lastDate: DateTime(2035), helpText: 'Pilih tanggal akhir',
               );
-
               if (picked != null) {
                 setModalState(() {
                   tempEnd = picked;
-                  if (tempStart.isAfter(tempEnd)) {
-                    tempStart = tempEnd;
-                  }
+                  if (tempStart.isAfter(tempEnd)) tempStart = tempEnd;
                 });
               }
             }
@@ -255,50 +193,18 @@ class _OrderPageState extends State<OrderPage> {
                       children: [
                         Expanded(
                           child: InkWell(
-                            onTap: pickStartDate,
-                            borderRadius: BorderRadius.circular(12),
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'Dari tanggal',
-                                prefixIcon: Icon(Icons.date_range),
-                              ),
-                              child: Text(_dateFormat.format(tempStart)),
-                            ),
+                            onTap: pickStartDate, borderRadius: BorderRadius.circular(12),
+                            child: InputDecorator(decoration: const InputDecoration(labelText: 'Dari', prefixIcon: Icon(Icons.date_range)), child: Text(_dateFormat.format(tempStart))),
                           ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: InkWell(
-                            onTap: pickEndDate,
-                            borderRadius: BorderRadius.circular(12),
-                            child: InputDecorator(
-                              decoration: const InputDecoration(
-                                labelText: 'Sampai tanggal',
-                                prefixIcon: Icon(Icons.event),
-                              ),
-                              child: Text(_dateFormat.format(tempEnd)),
-                            ),
+                            onTap: pickEndDate, borderRadius: BorderRadius.circular(12),
+                            child: InputDecorator(decoration: const InputDecoration(labelText: 'Sampai', prefixIcon: Icon(Icons.event)), child: Text(_dateFormat.format(tempEnd))),
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 14),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.orange.withOpacity(0.18),
-                        ),
-                      ),
-                      child: const Text(
-                        'Filter ini berlaku untuk tanggal pesan dan tanggal ambil dengan kondisi AND.',
-                      ),
                     ),
                   ],
                 ),
@@ -306,35 +212,18 @@ class _OrderPageState extends State<OrderPage> {
               actions: [
                 TextButton(
                   onPressed: () {
-                    setState(() {
-                      _filterStartDate = null;
-                      _filterEndDate = null;
-                    });
+                    setState(() { _filterStartDate = null; _filterEndDate = null; });
                     Navigator.pop(context);
                   },
                   child: const Text('Reset'),
                 ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Batal'),
-                ),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
                 FilledButton(
                   onPressed: () {
-                    setState(() {
-                      _filterStartDate = DateTime(
-                        tempStart.year,
-                        tempStart.month,
-                        tempStart.day,
-                      );
-                      _filterEndDate = DateTime(
-                        tempEnd.year,
-                        tempEnd.month,
-                        tempEnd.day,
-                      );
-                    });
+                    setState(() { _filterStartDate = tempStart; _filterEndDate = tempEnd; });
                     Navigator.pop(context);
                   },
-                  child: const Text('Pilih'),
+                  child: const Text('Terapkan'),
                 ),
               ],
             );
@@ -346,103 +235,49 @@ class _OrderPageState extends State<OrderPage> {
 
   void _setToday() {
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-
-    setState(() {
-      _filterStartDate = today;
-      _filterEndDate = today;
-    });
+    setState(() { _filterStartDate = DateTime(now.year, now.month, now.day); _filterEndDate = DateTime(now.year, now.month, now.day); });
   }
 
   void _setThisMonth() {
     final now = DateTime.now();
-
-    setState(() {
-      _filterStartDate = DateTime(now.year, now.month, 1);
-      _filterEndDate = DateTime(now.year, now.month + 1, 0);
-    });
+    setState(() { _filterStartDate = DateTime(now.year, now.month, 1); _filterEndDate = DateTime(now.year, now.month + 1, 0); });
   }
 
   void _setLast7Days() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-
-    setState(() {
-      _filterEndDate = today;
-      _filterStartDate = today.subtract(const Duration(days: 6));
-    });
+    setState(() { _filterEndDate = today; _filterStartDate = today.subtract(const Duration(days: 6)); });
   }
 
-  void _clearFilter() {
-    setState(() {
-      _filterStartDate = null;
-      _filterEndDate = null;
-    });
-  }
+  void _clearFilter() => setState(() { _filterStartDate = null; _filterEndDate = null; });
 
   Future<void> _pickOrderDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _orderDate ?? DateTime.now(),
-      firstDate: DateTime(2024),
-      lastDate: DateTime(2035),
-      helpText: 'Pilih tanggal order masuk',
-    );
-
-    if (picked != null) {
-      setState(() {
-        _orderDate = picked;
-      });
-    }
+    final picked = await showDatePicker(context: context, initialDate: _orderDate ?? DateTime.now(), firstDate: DateTime(2024), lastDate: DateTime(2035), helpText: 'Tanggal masuk');
+    if (picked != null) setState(() { _orderDate = picked; });
   }
 
   Future<void> _pickPickupDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _pickupDate ?? _orderDate ?? DateTime.now(),
-      firstDate: DateTime(2024),
-      lastDate: DateTime(2035),
-      helpText: 'Pilih tanggal diambil pembeli',
-    );
-
-    if (picked != null) {
-      setState(() {
-        _pickupDate = picked;
-      });
-    }
+    final picked = await showDatePicker(context: context, initialDate: _pickupDate ?? _orderDate ?? DateTime.now(), firstDate: DateTime(2024), lastDate: DateTime(2035), helpText: 'Tanggal diambil');
+    if (picked != null) setState(() { _pickupDate = picked; });
   }
 
   void _addOrder() {
     final customerName = _normalizeCustomerName(_customerController.text);
-    final weightKg =
-        double.tryParse(_weightController.text.trim().replaceAll(',', '.'));
+    final weightKg = double.tryParse(_weightController.text.trim().replaceAll(',', '.'));
 
-    if (customerName.isEmpty ||
-        _orderDate == null ||
-        _pickupDate == null ||
-        weightKg == null ||
-        weightKg <= 0) {
-      _showSnackBar(
-        'Lengkapi nama pembeli, tanggal order, tanggal ambil, dan bobot kue.',
-      );
+    if (customerName.isEmpty || _orderDate == null || _pickupDate == null || weightKg == null || weightKg <= 0) {
+      _showSnackBar('Lengkapi nama pembeli, tanggal order, tanggal ambil, dan bobot kue.');
       return;
     }
 
     setState(() {
-      _orders.add(
-        OrderItem(
-          customerName: customerName,
-          orderDate: _orderDate!,
-          pickupDate: _pickupDate!,
-          weightKg: weightKg,
-          isPickedUp: false,
-        ),
-      );
-
+      _orders.add(OrderItem(customerName: customerName, orderDate: _orderDate!, pickupDate: _pickupDate!, weightKg: weightKg, isPickedUp: false));
       _customerController.clear();
       _weightController.clear();
       _orderDate = null;
       _pickupDate = null;
+      // Otomatis pindah ke tab Daftar Order setelah berhasil input
+      _selectedIndex = 1; 
     });
 
     _showSnackBar('Order berhasil ditambahkan.');
@@ -450,44 +285,10 @@ class _OrderPageState extends State<OrderPage> {
 
   Future<void> _editOrder(OrderItem item) async {
     final customerController = TextEditingController(text: item.customerName);
-    final weightController =
-        TextEditingController(text: item.weightKg.toStringAsFixed(2));
-
+    final weightController = TextEditingController(text: item.weightKg.toStringAsFixed(2));
     DateTime selectedOrderDate = item.orderDate;
     DateTime selectedPickupDate = item.pickupDate;
     bool selectedPickedUp = item.isPickedUp;
-
-    Future<void> pickEditOrderDate(StateSetter setModalState) async {
-      final picked = await showDatePicker(
-        context: context,
-        initialDate: selectedOrderDate,
-        firstDate: DateTime(2024),
-        lastDate: DateTime(2035),
-        helpText: 'Pilih tanggal order masuk',
-      );
-
-      if (picked != null) {
-        setModalState(() {
-          selectedOrderDate = picked;
-        });
-      }
-    }
-
-    Future<void> pickEditPickupDate(StateSetter setModalState) async {
-      final picked = await showDatePicker(
-        context: context,
-        initialDate: selectedPickupDate,
-        firstDate: DateTime(2024),
-        lastDate: DateTime(2035),
-        helpText: 'Pilih tanggal diambil pembeli',
-      );
-
-      if (picked != null) {
-        setModalState(() {
-          selectedPickupDate = picked;
-        });
-      }
-    }
 
     await showDialog(
       context: context,
@@ -502,93 +303,46 @@ class _OrderPageState extends State<OrderPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextField(
-                        controller: customerController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nama pembeli',
-                          prefixIcon: Icon(Icons.person),
-                        ),
-                      ),
+                      TextField(controller: customerController, decoration: const InputDecoration(labelText: 'Nama pembeli', prefixIcon: Icon(Icons.person))),
                       const SizedBox(height: 16),
                       InkWell(
-                        onTap: () => pickEditOrderDate(setModalState),
-                        borderRadius: BorderRadius.circular(12),
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Tanggal order masuk',
-                            prefixIcon: Icon(Icons.edit_calendar),
-                          ),
-                          child: Text(_dateFormat.format(selectedOrderDate)),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      InkWell(
-                        onTap: () => pickEditPickupDate(setModalState),
-                        borderRadius: BorderRadius.circular(12),
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Tanggal diambil pembeli',
-                            prefixIcon: Icon(Icons.event_available),
-                          ),
-                          child: Text(_dateFormat.format(selectedPickupDate)),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: weightController,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(decimal: true),
-                        decoration: const InputDecoration(
-                          labelText: 'Bobot kue cina (kg)',
-                          prefixIcon: Icon(Icons.scale),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: selectedPickedUp,
-                        activeColor: Colors.green,
-                        onChanged: (value) {
-                          setModalState(() {
-                            selectedPickedUp = value;
-                          });
+                        onTap: () async {
+                          final picked = await showDatePicker(context: context, initialDate: selectedOrderDate, firstDate: DateTime(2024), lastDate: DateTime(2035));
+                          if (picked != null) setModalState(() => selectedOrderDate = picked);
                         },
-                        title: const Text('Sudah diambil'),
+                        borderRadius: BorderRadius.circular(12),
+                        child: InputDecorator(decoration: const InputDecoration(labelText: 'Tanggal order masuk', prefixIcon: Icon(Icons.edit_calendar)), child: Text(_dateFormat.format(selectedOrderDate))),
                       ),
+                      const SizedBox(height: 16),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(context: context, initialDate: selectedPickupDate, firstDate: DateTime(2024), lastDate: DateTime(2035));
+                          if (picked != null) setModalState(() => selectedPickupDate = picked);
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: InputDecorator(decoration: const InputDecoration(labelText: 'Tanggal diambil pembeli', prefixIcon: Icon(Icons.event_available)), child: Text(_dateFormat.format(selectedPickupDate))),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(controller: weightController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Bobot kue cina (kg)', prefixIcon: Icon(Icons.scale))),
+                      const SizedBox(height: 12),
+                      SwitchListTile(contentPadding: EdgeInsets.zero, value: selectedPickedUp, activeColor: Colors.green, onChanged: (value) => setModalState(() => selectedPickedUp = value), title: const Text('Sudah diambil')),
                     ],
                   ),
                 ),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Batal'),
-                ),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
                 FilledButton(
                   onPressed: () {
-                    final updatedName =
-                        _normalizeCustomerName(customerController.text);
-                    final updatedWeight = double.tryParse(
-                      weightController.text.trim().replaceAll(',', '.'),
-                    );
-
-                    if (updatedName.isEmpty ||
-                        updatedWeight == null ||
-                        updatedWeight <= 0) {
-                      _showSnackBar(
-                        'Nama pembeli dan bobot harus diisi dengan benar.',
-                      );
+                    final updatedName = _normalizeCustomerName(customerController.text);
+                    final updatedWeight = double.tryParse(weightController.text.trim().replaceAll(',', '.'));
+                    if (updatedName.isEmpty || updatedWeight == null || updatedWeight <= 0) {
+                      _showSnackBar('Nama pembeli dan bobot harus diisi dengan benar.');
                       return;
                     }
-
                     setState(() {
-                      item.customerName = updatedName;
-                      item.orderDate = selectedOrderDate;
-                      item.pickupDate = selectedPickupDate;
-                      item.weightKg = updatedWeight;
-                      item.isPickedUp = selectedPickedUp;
+                      item.customerName = updatedName; item.orderDate = selectedOrderDate; item.pickupDate = selectedPickupDate; item.weightKg = updatedWeight; item.isPickedUp = selectedPickedUp;
                     });
-
                     Navigator.pop(context);
                     _showSnackBar('Order berhasil diperbarui.');
                   },
@@ -600,214 +354,104 @@ class _OrderPageState extends State<OrderPage> {
         );
       },
     );
-
-    customerController.dispose();
-    weightController.dispose();
-  }
-
-  void _togglePickedUp(OrderItem item, bool? value) {
-    setState(() {
-      item.isPickedUp = value ?? false;
-    });
   }
 
   void _deleteOrder(OrderItem item) {
-    setState(() {
-      _orders.remove(item);
-    });
+    setState(() => _orders.remove(item));
     _showSnackBar('Order berhasil dihapus.');
   }
 
+  // --- LOGIKA EXCEL ---
   Future<void> _importXlsx() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['xlsx'],
-        withData: true,
-      );
+      final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['xlsx'], withData: true);
+      if (result == null || result.files.isEmpty) return;
 
-      if (result == null || result.files.isEmpty) {
-        _showSnackBar('Tidak ada file XLSX yang dipilih.');
-        return;
-      }
-
-      final file = result.files.first;
-      final bytes = file.bytes;
-
-      if (bytes == null || bytes.isEmpty) {
-        _showSnackBar('Gagal membaca file XLSX.');
-        return;
-      }
+      final bytes = result.files.first.bytes;
+      if (bytes == null || bytes.isEmpty) throw Exception('Gagal membaca file XLSX.');
 
       final workbook = excel.Excel.decodeBytes(bytes);
-      if (workbook.tables.isEmpty) {
-        throw Exception('Sheet XLSX tidak ditemukan.');
-      }
+      if (workbook.tables.isEmpty) throw Exception('Sheet XLSX tidak ditemukan.');
 
-      final firstSheetName = workbook.tables.keys.first;
-      final excel.Sheet sheet = workbook.tables[firstSheetName]!;
-
-      final importedOrders = _parseOrdersFromSheet(sheet);
-
-      setState(() {
-        _orders
-          ..clear()
-          ..addAll(importedOrders);
-      });
-
-      _showSnackBar(
-        'Import XLSX berhasil. ${importedOrders.length} order dimuat.',
-      );
+      final importedOrders = _parseOrdersFromSheet(workbook.tables[workbook.tables.keys.first]!);
+      setState(() { _orders.clear(); _orders.addAll(importedOrders); });
+      _showSnackBar('Import XLSX berhasil. ${importedOrders.length} order dimuat.');
     } catch (e) {
       _showSnackBar('Gagal import XLSX: $e');
     }
   }
 
-  Future<void> _downloadXlsx() async { // Ubah menjadi Future<void> dan async
+  Future<void> _downloadXlsx() async {
     try {
       final workbook = excel.Excel.createExcel();
       final defaultSheetName = workbook.getDefaultSheet() ?? 'Sheet1';
-
-      if (defaultSheetName != 'Orders') {
-        workbook.rename(defaultSheetName, 'Orders');
-      }
-
+      if (defaultSheetName != 'Orders') workbook.rename(defaultSheetName, 'Orders');
       final excel.Sheet sheet = workbook['Orders'];
 
-      final headers = [
-        'customer_name',
-        'order_date',
-        'pickup_date',
-        'weight_kg',
-        'is_picked_up',
-        'total_price',
-      ];
-
+      final headers = ['customer_name', 'order_date', 'pickup_date', 'weight_kg', 'is_picked_up', 'total_price'];
       for (int col = 0; col < headers.length; col++) {
-        sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: col,
-                rowIndex: 0,
-              ),
-            )
-            .value = excel.TextCellValue(headers[col]);
+        sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0)).value = excel.TextCellValue(headers[col]);
       }
 
       for (int row = 0; row < _orders.length; row++) {
         final item = _orders[row];
         final dataRow = row + 1;
-
-        sheet
-            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: dataRow))
-            .value = excel.TextCellValue(item.customerName);
-
-        sheet
-            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: dataRow))
-            .value = excel.TextCellValue(OrderItem.toIsoDate(item.orderDate));
-
-        sheet
-            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: dataRow))
-            .value = excel.TextCellValue(OrderItem.toIsoDate(item.pickupDate));
-
-        sheet
-            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: dataRow))
-            .value = excel.DoubleCellValue(item.weightKg);
-
-        sheet
-            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: dataRow))
-            .value = excel.TextCellValue(item.isPickedUp ? 'true' : 'false');
-
-        sheet
-            .cell(excel.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: dataRow))
-            .value = excel.DoubleCellValue(item.totalPrice);
+        sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: dataRow)).value = excel.TextCellValue(item.customerName);
+        sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: dataRow)).value = excel.TextCellValue(OrderItem.toIsoDate(item.orderDate));
+        sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: dataRow)).value = excel.TextCellValue(OrderItem.toIsoDate(item.pickupDate));
+        sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: dataRow)).value = excel.DoubleCellValue(item.weightKg);
+        sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: dataRow)).value = excel.TextCellValue(item.isPickedUp ? 'true' : 'false');
+        sheet.cell(excel.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: dataRow)).value = excel.DoubleCellValue(item.totalPrice);
       }
 
       final encoded = workbook.encode();
-      if (encoded == null || encoded.isEmpty) {
-        throw Exception('Gagal membuat file XLSX.');
-      }
-
+      if (encoded == null || encoded.isEmpty) throw Exception('Gagal membuat file XLSX.');
       final fileBytes = Uint8List.fromList(encoded);
 
-      if (fileBytes.isEmpty) {
-        throw Exception('Data file XLSX kosong.');
-      }
-
-      // --- KODE BARU UNTUK MENYIMPAN DAN MEMBUKA FILE DI ANDROID/IOS ---
       Directory? directory;
       if (Platform.isAndroid) {
-        // Menyimpan di folder khusus aplikasi agar tidak perlu izin ribet
         directory = await getExternalStorageDirectory();
       } else if (Platform.isIOS) {
         directory = await getApplicationDocumentsDirectory();
       }
 
       if (directory != null) {
-        // Membuat nama file yang unik berdasarkan waktu saat ini
         final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
         final String filePath = '${directory.path}/Order_Kue_Cina_$timestamp.xlsx';
         final File file = File(filePath);
         
-        // Menyimpan data ke file fisik
         await file.writeAsBytes(fileBytes, flush: true);
-        
         _showSnackBar('Berhasil! File tersimpan.');
         
-        // Langsung membuka file menggunakan aplikasi Excel/WPS di HP
         final result = await OpenFilex.open(filePath);
         if (result.type != ResultType.done) {
-          _showSnackBar('Berhasil disimpan, tapi gagal membuka: ${result.message}');
+          _showSnackBar('File tersimpan, tapi tidak ada aplikasi untuk membukanya.');
         }
-      } else {
-        _showSnackBar('Gagal mendapatkan folder penyimpanan di HP.');
       }
-      // -----------------------------------------------------------------
-
     } catch (e) {
       _showSnackBar('Gagal menyiapkan XLSX: $e');
     }
   }
 
+  // --- HELPER FUNCTIONS ---
   List<OrderItem> _parseOrdersFromSheet(excel.Sheet sheet) {
     final rows = sheet.rows;
-    if (rows.isEmpty) {
-      throw Exception('File XLSX kosong.');
-    }
-
-    final header = rows.first
-        .map((cell) => _cellToString(cell).trim().toLowerCase())
-        .toList();
-
+    if (rows.isEmpty) throw Exception('File XLSX kosong.');
+    final header = rows.first.map((cell) => _cellToString(cell).trim().toLowerCase()).toList();
     final customerIndex = header.indexOf('customer_name');
     final orderDateIndex = header.indexOf('order_date');
     final pickupDateIndex = header.indexOf('pickup_date');
     final weightIndex = header.indexOf('weight_kg');
     final pickedIndex = header.indexOf('is_picked_up');
 
-    if (customerIndex == -1 ||
-        orderDateIndex == -1 ||
-        pickupDateIndex == -1 ||
-        weightIndex == -1 ||
-        pickedIndex == -1) {
-      throw Exception(
-        'Header XLSX tidak sesuai. Gunakan header: '
-        'customer_name, order_date, pickup_date, weight_kg, is_picked_up, total_price',
-      );
+    if (customerIndex == -1 || orderDateIndex == -1 || pickupDateIndex == -1 || weightIndex == -1 || pickedIndex == -1) {
+      throw Exception('Header XLSX tidak sesuai standar.');
     }
 
     final result = <OrderItem>[];
-
     for (int i = 1; i < rows.length; i++) {
       final row = rows[i];
-
-      final isCompletelyEmpty = row.every(
-        (cell) => _cellToString(cell).trim().isEmpty,
-      );
-
-      if (isCompletelyEmpty) {
-        continue;
-      }
+      if (row.every((cell) => _cellToString(cell).trim().isEmpty)) continue;
 
       final customerName = _normalizeCustomerName(_readCell(row, customerIndex));
       final orderDate = _parseFlexibleDate(_readCell(row, orderDateIndex));
@@ -815,680 +459,295 @@ class _OrderPageState extends State<OrderPage> {
       final weightKg = _parseFlexibleDouble(_readCell(row, weightIndex));
       final isPickedUp = _parseBool(_readCell(row, pickedIndex));
 
-      if (customerName.isEmpty ||
-          orderDate == null ||
-          pickupDate == null ||
-          weightKg == null) {
-        throw Exception('Format data tidak valid pada baris ke-${i + 1}.');
+      if (customerName.isNotEmpty && orderDate != null && pickupDate != null && weightKg != null) {
+        result.add(OrderItem(customerName: customerName, orderDate: orderDate, pickupDate: pickupDate, weightKg: weightKg, isPickedUp: isPickedUp));
       }
-
-      result.add(
-        OrderItem(
-          customerName: customerName,
-          orderDate: orderDate,
-          pickupDate: pickupDate,
-          weightKg: weightKg,
-          isPickedUp: isPickedUp,
-        ),
-      );
     }
-
     return result;
   }
 
-  String _readCell(List<excel.Data?> row, int index) {
-    if (index >= row.length) return '';
-    return _cellToString(row[index]);
-  }
-
-  String _cellToString(excel.Data? cell) {
-    if (cell == null || cell.value == null) return '';
-    return cell.value.toString();
-  }
-
-  double? _parseFlexibleDouble(String value) {
-    final normalized = value.trim().replaceAll(',', '.');
-    return double.tryParse(normalized);
-  }
-
+  String _readCell(List<excel.Data?> row, int index) => (index >= row.length) ? '' : _cellToString(row[index]);
+  String _cellToString(excel.Data? cell) => cell?.value?.toString() ?? '';
+  double? _parseFlexibleDouble(String value) => double.tryParse(value.trim().replaceAll(',', '.'));
   DateTime? _parseFlexibleDate(String value) {
     final trimmed = value.trim();
     if (trimmed.isEmpty) return null;
-
-    final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$');
-    final slash = RegExp(r'^(\d{2})/(\d{2})/(\d{4})$');
-
-    if (iso.hasMatch(trimmed)) {
-      final m = iso.firstMatch(trimmed)!;
-      return DateTime(
-        int.parse(m.group(1)!),
-        int.parse(m.group(2)!),
-        int.parse(m.group(3)!),
-      );
-    }
-
-    if (slash.hasMatch(trimmed)) {
-      final m = slash.firstMatch(trimmed)!;
-      return DateTime(
-        int.parse(m.group(3)!),
-        int.parse(m.group(2)!),
-        int.parse(m.group(1)!),
-      );
-    }
-
-    try {
-      return DateTime.parse(trimmed);
-    } catch (_) {
-      return null;
-    }
+    try { return DateTime.parse(trimmed); } catch (_) { return null; }
   }
-
   bool _parseBool(String value) {
-    final normalized = value.trim().toLowerCase();
-    return normalized == 'true' ||
-        normalized == '1' ||
-        normalized == 'yes' ||
-        normalized == 'ya';
+    final v = value.trim().toLowerCase();
+    return v == 'true' || v == '1' || v == 'yes' || v == 'ya';
   }
+  String _normalizeCustomerName(String text) => text.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).map((word) => word[0].toUpperCase() + word.substring(1).toLowerCase()).join(' ');
+  String _formatDateOrPlaceholder(DateTime? date, String placeholder) => date == null ? placeholder : _dateFormat.format(date);
+  String _formatRangeText() => (_filterStartDate == null || _filterEndDate == null) ? 'Pilih rentang tanggal' : '${_dateFormat.format(_filterStartDate!)} - ${_dateFormat.format(_filterEndDate!)}';
+  void _showSnackBar(String message) { if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message))); }
 
-  String _normalizeCustomerName(String text) {
-    return text
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((word) => word.isNotEmpty)
-        .map(
-          (word) => word[0].toUpperCase() + word.substring(1).toLowerCase(),
-        )
-        .join(' ');
-  }
+  // --- WIDGET BUILDERS ---
 
-  String _formatDateOrPlaceholder(DateTime? date, String placeholder) {
-    if (date == null) return placeholder;
-    return _dateFormat.format(date);
-  }
-
-  String _formatRangeText() {
-    if (_filterStartDate == null || _filterEndDate == null) {
-      return 'Pilih rentang tanggal';
-    }
-    return '${_dateFormat.format(_filterStartDate!)} - ${_dateFormat.format(_filterEndDate!)}';
-  }
-
-  void _showSnackBar(String message) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
-  Widget _buildStatusSection(OrderItem item) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 6,
-      ),
-      decoration: BoxDecoration(
-        color: item.isPickedUp
-            ? Colors.green.withOpacity(0.14)
-            : Colors.orange.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: item.isPickedUp
-              ? Colors.green.withOpacity(0.28)
-              : Colors.orange.withOpacity(0.20),
+  Widget _buildInputTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Input Order Baru', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text('Harga kue cina: ${_currencyFormat.format(45000)} / kg', style: const TextStyle(fontSize: 15)),
+                  const SizedBox(height: 20),
+                  TextField(controller: _customerController, decoration: const InputDecoration(labelText: 'Nama pembeli', prefixIcon: Icon(Icons.person))),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: _pickOrderDate, borderRadius: BorderRadius.circular(12),
+                    child: InputDecorator(decoration: const InputDecoration(labelText: 'Tanggal order masuk', prefixIcon: Icon(Icons.edit_calendar)), child: Text(_formatDateOrPlaceholder(_orderDate, 'Pilih tanggal'))),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: _pickPickupDate, borderRadius: BorderRadius.circular(12),
+                    child: InputDecorator(decoration: const InputDecoration(labelText: 'Tanggal diambil pembeli', prefixIcon: Icon(Icons.event_available)), child: Text(_formatDateOrPlaceholder(_pickupDate, 'Pilih tanggal'))),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(controller: _weightController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Bobot kue cina (kg)', prefixIcon: Icon(Icons.scale), hintText: 'Contoh: 1 atau 2.5')),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: FilledButton.icon(onPressed: _addOrder, icon: const Icon(Icons.add), label: const Text('Simpan Order', style: TextStyle(fontSize: 16))),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
-        boxShadow: item.isPickedUp
-            ? [
-                BoxShadow(
-                  color: Colors.green.withOpacity(0.10),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ]
-            : [],
-      ),
-      child: Row(
-        children: [
-          AnimatedScale(
-            scale: item.isPickedUp ? 1.05 : 1.0,
-            duration: const Duration(milliseconds: 180),
-            curve: Curves.easeOut,
-            child: Checkbox(
-              value: item.isPickedUp,
-              activeColor: Colors.green,
-              checkColor: Colors.white,
-              side: BorderSide(
-                color: item.isPickedUp
-                    ? Colors.green
-                    : Colors.grey.shade500,
-                width: 1.4,
-              ),
-              onChanged: (value) => _togglePickedUp(item, value),
-            ),
-          ),
-          Expanded(
-            child: AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeInOut,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                color: item.isPickedUp
-                    ? Colors.green.shade800
-                    : Colors.black87,
-              ),
-              child: Text(
-                item.isPickedUp ? 'Sudah diambil' : 'Belum diambil',
-              ),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Edit order',
-            onPressed: () => _editOrder(item),
-            icon: const Icon(Icons.edit_outlined),
-          ),
-          IconButton(
-            tooltip: 'Hapus order',
-            onPressed: () => _deleteOrder(item),
-            icon: const Icon(Icons.delete_outline),
-          ),
-        ],
       ),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Pencatatan Order Kue Cina'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            tooltip: 'Upload XLSX',
-            onPressed: _importXlsx,
-            icon: const Icon(Icons.upload_file),
-          ),
-          IconButton(
-            tooltip: 'Download XLSX',
-            onPressed: _downloadXlsx,
-            icon: const Icon(Icons.download),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 1000;
+  Widget _buildListTab() {
+    final groupedEntries = _groupedOrders.entries.toList();
 
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1200),
-                child: isWide
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(flex: 4, child: _buildFormSection()),
-                          const SizedBox(width: 16),
-                          Expanded(flex: 6, child: _buildSummaryAndList()),
-                        ],
-                      )
-                    : Column(
-                        children: [
-                          _buildFormSection(),
-                          const SizedBox(height: 16),
-                          _buildSummaryAndList(),
-                        ],
-                      ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildFormSection() {
-    return Column(
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Filter Tanggal',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Filter berlaku untuk tanggal pesan dan tanggal ambil dengan kondisi AND.',
-                ),
-                const SizedBox(height: 20),
-                InkWell(
-                  onTap: _pickDateRange,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Rentang tanggal',
-                      prefixIcon: Icon(Icons.date_range),
-                    ),
-                    child: Text(_formatRangeText()),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    OutlinedButton(
-                      onPressed: _setToday,
-                      child: const Text('Hari ini'),
-                    ),
-                    OutlinedButton(
-                      onPressed: _setThisMonth,
-                      child: const Text('Bulan ini'),
-                    ),
-                    OutlinedButton(
-                      onPressed: _setLast7Days,
-                      child: const Text('7 hari'),
-                    ),
-                    OutlinedButton(
-                      onPressed: _clearFilter,
-                      child: const Text('Semua'),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.orange.withOpacity(0.2)),
-                  ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 800),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Bagian Filter
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'XLSX',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Upload XLSX untuk memuat order, atau download XLSX untuk menyimpan data saat ini.',
+                      const Text('Filter Tanggal Order', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      InkWell(
+                        onTap: _pickDateRange, borderRadius: BorderRadius.circular(12),
+                        child: InputDecorator(decoration: const InputDecoration(labelText: 'Rentang tanggal', prefixIcon: Icon(Icons.date_range), contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8)), child: Text(_formatRangeText())),
                       ),
                       const SizedBox(height: 12),
                       Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
+                        spacing: 8, runSpacing: 8,
                         children: [
-                          FilledButton.icon(
-                            onPressed: _importXlsx,
-                            icon: const Icon(Icons.upload_file),
-                            label: const Text('Upload XLSX'),
-                          ),
-                          OutlinedButton.icon(
-                            onPressed: _downloadXlsx,
-                            icon: const Icon(Icons.download),
-                            label: const Text('Download XLSX'),
-                          ),
+                          OutlinedButton(onPressed: _setToday, child: const Text('Hari ini')),
+                          OutlinedButton(onPressed: _setThisMonth, child: const Text('Bulan ini')),
+                          OutlinedButton(onPressed: _setLast7Days, child: const Text('7 hari')),
+                          OutlinedButton(onPressed: _clearFilter, child: const Text('Semua')),
                         ],
                       ),
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Input Order',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Harga kue cina: ${_currencyFormat.format(45000)} / kg',
-                  style: const TextStyle(fontSize: 15),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: _customerController,
-                  decoration: const InputDecoration(
-                    labelText: 'Nama pembeli',
-                    prefixIcon: Icon(Icons.person),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: _pickOrderDate,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Tanggal order masuk',
-                      prefixIcon: Icon(Icons.edit_calendar),
-                    ),
-                    child: Text(
-                      _formatDateOrPlaceholder(_orderDate, 'Pilih tanggal'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: _pickPickupDate,
-                  borderRadius: BorderRadius.circular(12),
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'Tanggal diambil pembeli',
-                      prefixIcon: Icon(Icons.event_available),
-                    ),
-                    child: Text(
-                      _formatDateOrPlaceholder(_pickupDate, 'Pilih tanggal'),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: _weightController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Bobot kue cina (kg)',
-                    prefixIcon: Icon(Icons.scale),
-                    hintText: 'Contoh: 1 atau 2.5',
-                  ),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton.icon(
-                    onPressed: _addOrder,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Tambah Order'),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSummaryAndList() {
-    final groupedEntries = _groupedOrders.entries.toList();
-
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _summaryCard(
-                title: 'Jumlah customer',
-                value: '$_totalCustomerCount orang',
-                icon: Icons.group,
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _summaryCard(
-                title: 'Total order',
-                value: '$_totalOrderCount pesanan',
-                icon: Icons.receipt_long,
+              const SizedBox(height: 16),
+              
+              // Bagian Summary
+              Row(
+                children: [
+                  Expanded(child: _summaryCard(title: 'Customer', value: '$_totalCustomerCount', icon: Icons.group)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _summaryCard(title: 'Total Order', value: '$_totalOrderCount', icon: Icons.receipt_long)),
+                ],
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _summaryCard(
-                title: 'Total bobot',
-                value: '${_totalOrderedWeight.toStringAsFixed(2)} kg',
-                icon: Icons.inventory_2,
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: _summaryCard(title: 'Total Bobot', value: '${_totalOrderedWeight.toStringAsFixed(1)} kg', icon: Icons.inventory_2)),
+                  const SizedBox(width: 8),
+                  Expanded(child: _summaryCard(title: 'Sisa (Belum)', value: '${_remainingWeight.toStringAsFixed(1)} kg', icon: Icons.pending_actions, color: Colors.orange)),
+                ],
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _summaryCard(
-                title: 'Belum diambil',
-                value: '${_remainingWeight.toStringAsFixed(2)} kg',
-                icon: Icons.pending_actions,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _summaryCard(
-          title: 'Total keseluruhan pesanan',
-          value: _currencyFormat.format(_totalRevenue),
-          icon: Icons.payments,
-          fullWidth: true,
-        ),
-        const SizedBox(height: 16),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Daftar Order',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text('Periode filter: ${_formatRangeText()}'),
-                const SizedBox(height: 16),
-                if (groupedEntries.isEmpty)
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.black12),
-                    ),
-                    child: const Text(
-                      'Belum ada order pada rentang tanggal yang dipilih.',
-                      textAlign: TextAlign.center,
-                    ),
-                  )
-                else
-                  Column(
-                    children: groupedEntries.map((entry) {
-                      final customerName = entry.key;
-                      final items = entry.value;
+              const SizedBox(height: 8),
+              _summaryCard(title: 'Estimasi Pendapatan', value: _currencyFormat.format(_totalRevenue), icon: Icons.payments, color: Colors.green, fullWidth: true),
+              const SizedBox(height: 20),
 
-                      final totalWeight = _getTotalWeightPerCustomer(items);
-                      final remainingWeight =
-                          _getRemainingWeightPerCustomer(items);
-                      final totalPrice = _getTotalPricePerCustomer(items);
-
-                      return Container(
-                        width: double.infinity,
-                        margin: const EdgeInsets.only(bottom: 16),
+              // Daftar Order
+              const Text('Daftar Pesanan', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              if (groupedEntries.isEmpty)
+                Container(
+                  width: double.infinity, padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.black12)),
+                  child: const Text('Belum ada order pada rentang tanggal yang dipilih.', textAlign: TextAlign.center),
+                )
+              else
+                Column(
+                  children: groupedEntries.map((entry) {
+                    final customerName = entry.key;
+                    final items = entry.value;
+                    final totalWeight = _getTotalWeightPerCustomer(items);
+                    final remainingWeight = _getRemainingWeightPerCustomer(items);
+                    
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: Padding(
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.black12),
-                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    customerName,
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Align(
-                                  alignment: Alignment.topRight,
+                                Expanded(child: Text(customerName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold))),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
+                                  child: Text('${totalWeight.toStringAsFixed(1)} kg (Sisa: ${remainingWeight.toStringAsFixed(1)})', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                                )
+                              ],
+                            ),
+                            const Divider(height: 24),
+                            ...items.map((item) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 12),
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(12),
-                                      border: Border.all(color: Colors.black12),
-                                    ),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.black12)),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.end,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          'Total bobot: ${totalWeight.toStringAsFixed(2)} kg',
-                                          textAlign: TextAlign.right,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13,
-                                          ),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text('Masuk: ${_dateFormat.format(item.orderDate)}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
+                                            Text('Ambil: ${_dateFormat.format(item.pickupDate)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                                          ],
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Belum diambil: ${remainingWeight.toStringAsFixed(2)} kg',
-                                          textAlign: TextAlign.right,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13,
-                                          ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text('${item.weightKg.toStringAsFixed(2)} kg', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                            Text(_currencyFormat.format(item.totalPrice), style: const TextStyle(fontSize: 16, color: Colors.green, fontWeight: FontWeight.bold)),
+                                          ],
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          'Total harga: ${_currencyFormat.format(totalPrice)}',
-                                          textAlign: TextAlign.right,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 13,
-                                          ),
-                                        ),
+                                        const SizedBox(height: 12),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: InkWell(
+                                                onTap: () => setState(() => item.isPickedUp = !item.isPickedUp),
+                                                child: Container(
+                                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                                  decoration: BoxDecoration(color: item.isPickedUp ? Colors.green.shade50 : Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.center,
+                                                    children: [
+                                                      Icon(item.isPickedUp ? Icons.check_circle : Icons.cancel, size: 18, color: item.isPickedUp ? Colors.green : Colors.red),
+                                                      const SizedBox(width: 6),
+                                                      Text(item.isPickedUp ? 'Selesai' : 'Belum Diambil', style: TextStyle(color: item.isPickedUp ? Colors.green : Colors.red, fontWeight: FontWeight.bold)),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            IconButton(icon: const Icon(Icons.edit, color: Colors.blue), onPressed: () => _editOrder(item)),
+                                            IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: () => _deleteOrder(item)),
+                                          ],
+                                        )
                                       ],
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            Column(
-                              children: items.map((item) {
-                                return Container(
-                                  width: double.infinity,
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: Colors.black12),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'Tanggal order: ${_dateFormat.format(item.orderDate)}',
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Tanggal ambil: ${_dateFormat.format(item.pickupDate)}',
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Bobot: ${item.weightKg.toStringAsFixed(2)} kg',
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        'Harga: ${_currencyFormat.format(item.totalPrice)}',
-                                      ),
-                                      const SizedBox(height: 10),
-                                      _buildStatusSection(item),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                            ),
+                                )).toList()
                           ],
                         ),
-                      );
-                    }).toList(),
-                  ),
-              ],
-            ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 
-  Widget _summaryCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    bool fullWidth = false,
-  }) {
+  Widget _summaryCard({required String title, required String value, required IconData icon, Color? color, bool fullWidth = false}) {
     return Card(
+      elevation: 0,
+      color: color?.withOpacity(0.1) ?? Colors.blue.withOpacity(0.1),
+      shape: RoundedRectangleBorder(side: BorderSide(color: color?.withOpacity(0.3) ?? Colors.blue.withOpacity(0.3)), borderRadius: BorderRadius.circular(12)),
       child: Padding(
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(16),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 24,
-              child: Icon(icon),
-            ),
-            const SizedBox(width: 14),
+            Icon(icon, color: color ?? Colors.blue, size: 32),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: fullWidth ? 15 : 14,
-                      color: Colors.black54,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: fullWidth ? 22 : 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
+                  Text(title, style: TextStyle(fontSize: 12, color: color?.withOpacity(0.8) ?? Colors.blue.shade700, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(value, style: TextStyle(fontSize: fullWidth ? 20 : 18, fontWeight: FontWeight.bold, color: Colors.black87)),
                 ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // --- MAIN BUILD ---
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('PesanKeranjang', style: TextStyle(fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        actions: [
+          IconButton(tooltip: 'Import Excel', onPressed: _importXlsx, icon: const Icon(Icons.upload_file)),
+          IconButton(tooltip: 'Download Excel', onPressed: _downloadXlsx, icon: const Icon(Icons.download)),
+          const SizedBox(width: 8),
+        ],
+      ),
+      // IndexedStack menahan state antar tab (ketikan tidak hilang)
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          _buildInputTab(),
+          _buildListTab(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (int index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.add_shopping_cart_outlined), selectedIcon: Icon(Icons.add_shopping_cart), label: 'Input Order'),
+          NavigationDestination(icon: Icon(Icons.list_alt_outlined), selectedIcon: Icon(Icons.list_alt), label: 'Daftar Order'),
+        ],
       ),
     );
   }
