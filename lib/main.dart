@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -33,7 +35,60 @@ class KueCinaApp extends StatelessWidget {
           elevation: 1,
         ),
       ),
-      home: const OrderPage(),
+      home: const SplashScreen(),
+    );
+  }
+}
+
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _navigateToHome();
+  }
+
+  Future<void> _navigateToHome() async {
+    // Simulasi proses loading / inisialisasi selama 2 detik
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+    
+    // Berpindah ke OrderPage sekaligus menghapus SplashScreen dari back-history
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const OrderPage()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFFF8F3), // Sesuai warna latar aplikasi
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Image.asset('assets/icon.png', width: 80, height: 80),
+            const SizedBox(height: 16),
+            const Text(
+              'PesanKeranjang',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.deepOrange,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const CircularProgressIndicator(color: Colors.deepOrange),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -61,6 +116,26 @@ class OrderItem {
     final d = date.day.toString().padLeft(2, '0');
     return '$y-$m-$d';
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'customerName': customerName,
+      'orderDate': orderDate.toIso8601String(),
+      'pickupDate': pickupDate.toIso8601String(),
+      'weightKg': weightKg,
+      'isPickedUp': isPickedUp,
+    };
+  }
+
+  factory OrderItem.fromJson(Map<String, dynamic> json) {
+    return OrderItem(
+      customerName: json['customerName'] ?? '',
+      orderDate: DateTime.parse(json['orderDate']),
+      pickupDate: DateTime.parse(json['pickupDate']),
+      weightKg: (json['weightKg'] as num).toDouble(),
+      isPickedUp: json['isPickedUp'] ?? false,
+    );
+  }
 }
 
 class OrderPage extends StatefulWidget {
@@ -71,6 +146,8 @@ class OrderPage extends StatefulWidget {
 }
 
 class _OrderPageState extends State<OrderPage> {
+  static const String _ordersStorageKey = 'saved_orders';
+
   int _selectedIndex = 0;
 
   final TextEditingController _customerController = TextEditingController();
@@ -95,6 +172,7 @@ class _OrderPageState extends State<OrderPage> {
   void initState() {
     super.initState();
     _setThisMonth();
+    _loadOrders();
   }
 
   @override
@@ -102,6 +180,107 @@ class _OrderPageState extends State<OrderPage> {
     _customerController.dispose();
     _weightController.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveOrders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonList = _orders.map((item) => item.toJson()).toList();
+    await prefs.setString(_ordersStorageKey, jsonEncode(jsonList));
+  }
+
+  Future<void> _loadOrders() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_ordersStorageKey);
+
+    if (raw == null || raw.isEmpty) return;
+
+    try {
+      final List<dynamic> decoded = jsonDecode(raw);
+      final loadedOrders = decoded
+          .map((item) => OrderItem.fromJson(Map<String, dynamic>.from(item)))
+          .toList();
+
+      if (!mounted) return;
+      setState(() {
+        _orders
+          ..clear()
+          ..addAll(loadedOrders);
+      });
+
+      // Jalankan pengecekan reminder setelah frame selesai dirender
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _checkReminders();
+      });
+    } catch (e) {
+      debugPrint('Gagal load orders: $e');
+    }
+  }
+
+  void _checkReminders() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final upcomingOrders = _orders.where((o) {
+      if (o.isPickedUp) return false; // Abaikan yang sudah diambil
+      final pickup = DateTime(
+          o.pickupDate.year, o.pickupDate.month, o.pickupDate.day);
+      return pickup == today || pickup == tomorrow;
+    }).toList();
+
+    if (upcomingOrders.isEmpty) return; // Jika tidak ada order hari ini/besok, lewati
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.notifications_active, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Pengingat Pesanan!'),
+            ],
+          ),
+          content: SizedBox(
+            width: 400,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: upcomingOrders.map((o) {
+                  final isToday = DateTime(o.pickupDate.year,
+                          o.pickupDate.month, o.pickupDate.day) ==
+                      today;
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(
+                      isToday ? Icons.warning : Icons.schedule,
+                      color: isToday ? Colors.red : Colors.orange,
+                    ),
+                    title: Text(
+                      o.customerName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                        isToday ? 'Jadwal Ambil: HARI INI' : 'Jadwal Ambil: BESOK'),
+                    trailing: Text(
+                      '${o.weightKg} kg',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Tutup'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   List<OrderItem> get _filteredOrders {
@@ -352,7 +531,7 @@ class _OrderPageState extends State<OrderPage> {
     }
   }
 
-  void _addOrder() {
+  Future<void> _addOrder() async {
     final customerName = _normalizeCustomerName(_customerController.text);
     final weightKg =
         double.tryParse(_weightController.text.trim().replaceAll(',', '.'));
@@ -385,6 +564,7 @@ class _OrderPageState extends State<OrderPage> {
       _selectedIndex = 1;
     });
 
+    await _saveOrders();
     _showSnackBar('Order berhasil ditambahkan.');
   }
 
@@ -490,7 +670,7 @@ class _OrderPageState extends State<OrderPage> {
                   child: const Text('Batal'),
                 ),
                 FilledButton(
-                  onPressed: () {
+                  onPressed: () async {
                     final updatedName =
                         _normalizeCustomerName(customerController.text);
                     final updatedWeight = double.tryParse(
@@ -511,7 +691,8 @@ class _OrderPageState extends State<OrderPage> {
                       item.weightKg = updatedWeight;
                       item.isPickedUp = selectedPickedUp;
                     });
-                    Navigator.pop(context);
+                    await _saveOrders();
+                    if (mounted) Navigator.pop(context);
                     _showSnackBar('Order berhasil diperbarui.');
                   },
                   child: const Text('Simpan'),
@@ -524,8 +705,9 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
-  void _deleteOrder(OrderItem item) {
+  Future<void> _deleteOrder(OrderItem item) async {
     setState(() => _orders.remove(item));
+    await _saveOrders();
     _showSnackBar('Order berhasil dihapus.');
   }
 
@@ -556,6 +738,7 @@ class _OrderPageState extends State<OrderPage> {
         _orders.addAll(importedOrders);
       });
 
+      await _saveOrders();
       _showSnackBar('Import XLSX berhasil. ${importedOrders.length} order dimuat.');
     } catch (e) {
       _showSnackBar('Gagal import XLSX: $e');
@@ -1022,6 +1205,7 @@ class _OrderPageState extends State<OrderPage> {
                       title: 'Total Order',
                       value: '$_totalOrderCount',
                       icon: Icons.receipt_long,
+                      color: Colors.brown.shade300,
                     ),
                   ),
                 ],
@@ -1034,12 +1218,13 @@ class _OrderPageState extends State<OrderPage> {
                       title: 'Total Bobot',
                       value: '${_totalOrderedWeight.toStringAsFixed(1)} kg',
                       icon: Icons.inventory_2,
+                      color : Colors.deepOrange.shade300
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: _summaryCard(
-                      title: 'Sisa (Belum)',
+                      title: 'Sisa Pesanan',
                       value: '${_remainingWeight.toStringAsFixed(1)} kg',
                       icon: Icons.pending_actions,
                       color: Colors.orange,
@@ -1112,7 +1297,7 @@ class _OrderPageState extends State<OrderPage> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    '${totalWeight.toStringAsFixed(1)} kg (Sisa: ${remainingWeight.toStringAsFixed(1)})',
+                                    '${totalWeight.toStringAsFixed(1)} kg (Tersisa: ${remainingWeight.toStringAsFixed(1)})',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       color: Colors.orange.shade900,
@@ -1184,10 +1369,13 @@ class _OrderPageState extends State<OrderPage> {
                                         children: [
                                           Expanded(
                                             child: InkWell(
-                                              onTap: () => setState(
-                                                () => item.isPickedUp =
-                                                    !item.isPickedUp,
-                                              ),
+                                              onTap: () async {
+                                                setState(() {
+                                                  item.isPickedUp =
+                                                      !item.isPickedUp;
+                                                });
+                                                await _saveOrders();
+                                              },
                                               child: Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
@@ -1295,8 +1483,7 @@ class _OrderPageState extends State<OrderPage> {
                     title,
                     style: TextStyle(
                       fontSize: 12,
-                      color:
-                          color?.withOpacity(0.8) ?? Colors.blue.shade700,
+                      color: color?.withOpacity(0.8) ?? Colors.blue.shade700,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -1323,8 +1510,8 @@ class _OrderPageState extends State<OrderPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'PesanKeranjang',
-          style: TextStyle(fontWeight: FontWeight.bold),
+          'Pesan Keranjang',
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange),
         ),
         centerTitle: true,
         actions: [
