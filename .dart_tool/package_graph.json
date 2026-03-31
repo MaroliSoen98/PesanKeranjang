@@ -1,10 +1,10 @@
 {
   "roots": [
-    "kue_cina_order_app"
+    "PesanKeranjang"
   ],
   "packages": [
     {
-      "name": "kue_cina_order_app",
+      "name": "PesanKeranjang",
       "version": "1.0.0+1",
       "dependencies": [
         "excel",
