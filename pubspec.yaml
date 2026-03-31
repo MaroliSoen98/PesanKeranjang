@@ -28,3 +28,6 @@ flutter_launcher_icons:
   web:
     generate: true
     image_path: "assets/icon.png"
+
+flutter:
+  uses-material-design: true
