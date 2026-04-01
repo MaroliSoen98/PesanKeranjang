@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:intl/intl.dart';
@@ -24,7 +25,7 @@ class KueCinaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Order Kue Cina',
+      title: 'Pesan Keranjang',
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.deepOrange,
@@ -70,8 +71,8 @@ class _SplashScreenState extends State<SplashScreen> {
       _appVersion = 'v${packageInfo.version}';
     });
 
-    // 2. Beri jeda minimum agar splash screen tidak berkedip jika loading terlalu cepat
-    await Future.delayed(const Duration(milliseconds: 500));
+    // 2. Beri jeda agar splash screen terlihat lebih lama (5 detik)
+    await Future.delayed(const Duration(seconds: 5));
 
     if (!mounted) return;
 
@@ -184,6 +185,8 @@ class OrderItem {
   }
 }
 
+enum SortMode { name, nearestPickup }
+
 class OrderPage extends StatefulWidget {
   final List<OrderItem> initialOrders;
 
@@ -197,9 +200,16 @@ class _OrderPageState extends State<OrderPage> {
   static const String _ordersStorageKey = 'saved_orders';
 
   int _selectedIndex = 0;
+  int _currentPage = 0;
+  final int _itemsPerPage = 3; // Menampilkan 3 pembeli per halaman
+
+  SortMode _sortMode = SortMode.name;
 
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
+
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   DateTime? _filterStartDate;
   DateTime? _filterEndDate;
@@ -236,6 +246,7 @@ class _OrderPageState extends State<OrderPage> {
   void dispose() {
     _customerController.dispose();
     _weightController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -251,6 +262,9 @@ class _OrderPageState extends State<OrderPage> {
     final today = DateTime(now.year, now.month, now.day);
 
     if (upcomingOrders.isEmpty) return; // Jika tidak ada order hari ini/besok, lewati
+
+    // Memutar suara notifikasi bawaan (alert/beep)
+    SystemSound.play(SystemSoundType.alert);
 
     showDialog(
       context: context,
@@ -323,6 +337,13 @@ class _OrderPageState extends State<OrderPage> {
 
   List<OrderItem> get _filteredOrders {
     return _orders.where((order) {
+      // Filter pencarian berdasarkan nama pembeli (mengabaikan huruf besar/kecil)
+      if (_searchQuery.isNotEmpty) {
+        if (!order.customerName.toLowerCase().contains(_searchQuery.toLowerCase())) {
+          return false;
+        }
+      }
+
       if (_filterStartDate == null || _filterEndDate == null) return true;
 
       final start = DateTime(
@@ -366,7 +387,15 @@ class _OrderPageState extends State<OrderPage> {
       grouped.putIfAbsent(item.customerName, () => []).add(item);
     }
     for (final entry in grouped.entries) {
-      entry.value.sort((a, b) => a.orderDate.compareTo(b.orderDate));
+      if (_sortMode == SortMode.nearestPickup) {
+        entry.value.sort((a, b) {
+          if (a.isPickedUp && !b.isPickedUp) return 1;
+          if (!a.isPickedUp && b.isPickedUp) return -1;
+          return a.pickupDate.compareTo(b.pickupDate);
+        });
+      } else {
+        entry.value.sort((a, b) => a.orderDate.compareTo(b.orderDate));
+      }
     }
     return grouped;
   }
@@ -514,6 +543,7 @@ class _OrderPageState extends State<OrderPage> {
     setState(() {
       _filterStartDate = DateTime(now.year, now.month, now.day);
       _filterEndDate = DateTime(now.year, now.month, now.day);
+      _currentPage = 0;
     });
   }
 
@@ -522,6 +552,7 @@ class _OrderPageState extends State<OrderPage> {
     setState(() {
       _filterStartDate = DateTime(now.year, now.month, 1);
       _filterEndDate = DateTime(now.year, now.month + 1, 0);
+      _currentPage = 0;
     });
   }
 
@@ -531,12 +562,14 @@ class _OrderPageState extends State<OrderPage> {
     setState(() {
       _filterEndDate = today;
       _filterStartDate = today.subtract(const Duration(days: 6));
+      _currentPage = 0;
     });
   }
 
   void _clearFilter() => setState(() {
         _filterStartDate = null;
         _filterEndDate = null;
+        _currentPage = 0;
       });
 
   Future<void> _pickOrderDate() async {
@@ -585,6 +618,14 @@ class _OrderPageState extends State<OrderPage> {
       return;
     }
 
+    // Validasi: Tanggal Pesan tidak boleh lebih besar dari Tanggal Ambil
+    final orderDateOnly = DateTime(_orderDate!.year, _orderDate!.month, _orderDate!.day);
+    final pickupDateOnly = DateTime(_pickupDate!.year, _pickupDate!.month, _pickupDate!.day);
+    if (orderDateOnly.isAfter(pickupDateOnly)) {
+      _showSnackBar('Tanggal pesanan tidak boleh lebih besar dari tanggal pengambilan.');
+      return;
+    }
+
     setState(() {
       _orders.add(
         OrderItem(
@@ -600,6 +641,7 @@ class _OrderPageState extends State<OrderPage> {
       _orderDate = null;
       _pickupDate = null;
       _selectedIndex = 1;
+      _currentPage = 0;
     });
 
     await _saveOrders();
@@ -722,6 +764,15 @@ class _OrderPageState extends State<OrderPage> {
                       );
                       return;
                     }
+
+                  // Validasi: Tanggal Pesan tidak boleh lebih besar dari Tanggal Ambil (saat diedit)
+                  final editOrderOnly = DateTime(selectedOrderDate.year, selectedOrderDate.month, selectedOrderDate.day);
+                  final editPickupOnly = DateTime(selectedPickupDate.year, selectedPickupDate.month, selectedPickupDate.day);
+                  if (editOrderOnly.isAfter(editPickupOnly)) {
+                    _showSnackBar('Tanggal pesanan tidak boleh lebih besar dari tanggal pengambilan.');
+                    return;
+                  }
+
                     setState(() {
                       item.customerName = updatedName;
                       item.orderDate = selectedOrderDate;
@@ -774,6 +825,7 @@ class _OrderPageState extends State<OrderPage> {
       setState(() {
         _orders.clear();
         _orders.addAll(importedOrders);
+        _currentPage = 0;
       });
 
       await _saveOrders();
@@ -1163,6 +1215,32 @@ class _OrderPageState extends State<OrderPage> {
 
     final groupedEntries = _groupedOrders.entries.toList();
 
+    if (_sortMode == SortMode.nearestPickup) {
+      groupedEntries.sort((a, b) {
+        final allPickedUpA = a.value.every((i) => i.isPickedUp);
+        final allPickedUpB = b.value.every((i) => i.isPickedUp);
+        if (allPickedUpA && !allPickedUpB) return 1;
+        if (!allPickedUpA && allPickedUpB) return -1;
+        return a.value.first.pickupDate.compareTo(b.value.first.pickupDate);
+      });
+    } else {
+      groupedEntries.sort((a, b) => a.key.compareTo(b.key));
+    }
+
+    final totalPages = (groupedEntries.length / _itemsPerPage).ceil();
+
+    // Pengamanan batas halaman jika ada pesanan dihapus
+    int displayPage = _currentPage;
+    if (displayPage >= totalPages && totalPages > 0) {
+      displayPage = totalPages - 1;
+    } else if (totalPages == 0) {
+      displayPage = 0;
+    }
+
+    final startIndex = displayPage * _itemsPerPage;
+    final endIndex = (startIndex + _itemsPerPage > groupedEntries.length) ? groupedEntries.length : startIndex + _itemsPerPage;
+    final paginatedEntries = groupedEntries.isEmpty ? <MapEntry<String, List<OrderItem>>>[] : groupedEntries.sublist(startIndex, endIndex);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Center(
@@ -1279,12 +1357,58 @@ class _OrderPageState extends State<OrderPage> {
                 fullWidth: true,
               ),
               const SizedBox(height: 20),
-              const Text(
-                'Daftar Pesanan',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text(
+            'Daftar Pesanan',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+          Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<SortMode>(
+                value: _sortMode,
+                icon: const Icon(Icons.sort, size: 18, color: Colors.deepOrange),
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                items: const [
+                  DropdownMenuItem(value: SortMode.name, child: Text('Urut Abjad Nama')),
+                  DropdownMenuItem(value: SortMode.nearestPickup, child: Text('Ambil Terdekat')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _sortMode = val;
+                      _currentPage = 0;
+                    });
+                  }
+                },
               ),
+            ),
+          ),
+        ],
+      ),
               const SizedBox(height: 12),
-              if (groupedEntries.isEmpty)
+            TextField(
+              controller: _searchController,
+              onChanged: (value) => setState(() {
+                _searchQuery = value;
+                _currentPage = 0;
+              }),
+              decoration: const InputDecoration(
+                labelText: 'Cari Nama Pembeli...',
+                prefixIcon: Icon(Icons.search),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 16),
+        if (groupedEntries.isEmpty)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -1299,192 +1423,276 @@ class _OrderPageState extends State<OrderPage> {
                   ),
                 )
               else
+              ...[
                 Column(
-                  children: groupedEntries.map((entry) {
+                  children: paginatedEntries.map((entry) {
                     final customerName = entry.key;
                     final items = entry.value;
-                    final totalWeight = _getTotalWeightPerCustomer(items);
-                    final remainingWeight = _getRemainingWeightPerCustomer(items);
+                    final allPickedUp = items.every((i) => i.isPickedUp);
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: allPickedUp ? Colors.green.shade50 : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: allPickedUp ? Colors.green.shade400 : Colors.grey.shade300,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              customerName,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: allPickedUp ? Colors.green.shade100 : Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Expanded(
-                                  child: Text(
-                                    customerName,
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                                Icon(
+                                  allPickedUp ? Icons.check_circle_outline : Icons.inventory_2_outlined,
+                                  size: 16,
+                                  color: allPickedUp ? Colors.green.shade700 : Colors.red.shade700,
                                 ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.orange.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    '${totalWeight.toStringAsFixed(1)} kg (Tersisa: ${remainingWeight.toStringAsFixed(1)})',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.orange.shade900,
-                                    ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Sisa : ${_getRemainingWeightPerCustomer(items).toStringAsFixed(1)} Kg',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: allPickedUp ? Colors.green.shade800 : Colors.red.shade800,
                                   ),
                                 ),
                               ],
                             ),
-                            const Divider(height: 24),
-                            ...items.map((item) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 12),
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ...items.asMap().entries.map((itemEntry) {
+                        final index = itemEntry.key;
+                        final item = itemEntry.value;
+                        final isPickedUp = item.isPickedUp;
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (index > 0)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Divider(height: 1, color: Colors.black12),
+                              ),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Pesan: ${_dateFormat.format(item.orderDate)}',
+                                  style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: Colors.black12),
+                                    color: isPickedUp ? Colors.green.shade100 : Colors.deepOrange.shade50,
+                                    borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                  child: Row(
                                     children: [
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            'Masuk: ${_dateFormat.format(item.orderDate)}',
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.black54,
-                                            ),
-                                          ),
-                                          Text(
-                                            'Ambil: ${_dateFormat.format(item.pickupDate)}',
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
+                                      Icon(
+                                        Icons.event_available,
+                                        size: 16,
+                                        color: isPickedUp ? Colors.green.shade700 : Colors.deepOrange.shade700,
                                       ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text(
-                                            '${item.weightKg.toStringAsFixed(2)} kg',
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                          Text(
-                                            _currencyFormat.format(
-                                              item.totalPrice,
-                                            ),
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              color: Colors.green,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: InkWell(
-                                              onTap: () async {
-                                                setState(() {
-                                                  item.isPickedUp =
-                                                      !item.isPickedUp;
-                                                });
-                                                await _saveOrders();
-                                              },
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  vertical: 8,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: item.isPickedUp
-                                                      ? Colors.green.shade50
-                                                      : Colors.red.shade50,
-                                                  borderRadius:
-                                                      BorderRadius.circular(8),
-                                                ),
-                                                child: Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      item.isPickedUp
-                                                          ? Icons.check_circle
-                                                          : Icons.cancel,
-                                                      size: 18,
-                                                      color: item.isPickedUp
-                                                          ? Colors.green
-                                                          : Colors.red,
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    Text(
-                                                      item.isPickedUp
-                                                          ? 'Selesai'
-                                                          : 'Belum Diambil',
-                                                      style: TextStyle(
-                                                        color: item.isPickedUp
-                                                            ? Colors.green
-                                                            : Colors.red,
-                                                        fontWeight:
-                                                            FontWeight.bold,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.edit,
-                                              color: Colors.blue,
-                                            ),
-                                            onPressed: () => _editOrder(item),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(
-                                              Icons.delete,
-                                              color: Colors.red,
-                                            ),
-                                            onPressed: () => _deleteOrder(item),
-                                          ),
-                                        ],
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Ambil: ${_dateFormat.format(item.pickupDate)}',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: isPickedUp ? Colors.green.shade800 : Colors.deepOrange.shade800,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                              );
-                            }).toList(),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('Bobot Pesanan', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${item.weightKg.toStringAsFixed(2)} kg',
+                                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    const Text('Total Harga', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _currencyFormat.format(item.totalPrice),
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.green.shade700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(vertical: 12),
+                              child: Divider(height: 1, color: Colors.black12),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () async {
+                                      setState(() {
+                                        item.isPickedUp = !item.isPickedUp;
+                                      });
+                                      await _saveOrders();
+                                    },
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(vertical: 10),
+                                      decoration: BoxDecoration(
+                                        color: isPickedUp ? Colors.green : Colors.white,
+                                        border: Border.all(
+                                          color: isPickedUp ? Colors.green : Colors.red.shade300,
+                                        ),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            isPickedUp ? Icons.check_circle : Icons.inventory_2_outlined,
+                                            size: 18,
+                                            color: isPickedUp ? Colors.white : Colors.red,
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            isPickedUp ? 'Sudah Diambil' : 'Belum Diambil',
+                                            style: TextStyle(
+                                              color: isPickedUp ? Colors.white : Colors.red,
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue),
+                                  onPressed: () => _editOrder(item),
+                                  tooltip: 'Edit',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                                  onPressed: () => _deleteOrder(item),
+                                  tooltip: 'Hapus',
+                                ),
+                              ],
+                            ),
                           ],
-                        ),
-                      ),
+                        );
+                      }).toList(),
+                    ],
+                  ),
                     );
                   }).toList(),
                 ),
+                if (totalPages > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16, bottom: 24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: IconButton(
+                            onPressed: displayPage > 0 ? () => setState(() => _currentPage = displayPage - 1) : null,
+                            icon: const Icon(Icons.chevron_left),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Text(
+                          'Halaman ${displayPage + 1} dari $totalPages',
+                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+                        ),
+                        const SizedBox(width: 16),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          child: IconButton(
+                            onPressed: displayPage < totalPages - 1 ? () => setState(() => _currentPage = displayPage + 1) : null,
+                            icon: const Icon(Icons.chevron_right),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildQuickFilterBtn(String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
           ),
         ),
       ),
