@@ -36,6 +36,32 @@ class KueCinaApp extends StatelessWidget {
         cardTheme: const CardThemeData(
           elevation: 1,
         ),
+        datePickerTheme: DatePickerThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent, // Menghilangkan tint warna bawaan Material 3 agar putih bersih
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24), // Lengkungan yang lebih modern
+          ),
+          headerBackgroundColor: Colors.white, // Header kalender putih
+          headerForegroundColor: Colors.black87, // Teks judul pada header menjadi gelap
+        ),
+        dialogTheme: DialogThemeData(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          // PERBAIKAN: Menambahkan style untuk teks agar tetap terbaca di mode gelap
+          titleTextStyle: const TextStyle(
+            color: Colors.black87,
+            fontSize: 22,
+            fontWeight: FontWeight.w600,
+          ),
+          contentTextStyle: const TextStyle(
+            color: Colors.black87,
+            fontSize: 15,
+          ),
+        ),
       ),
       home: const SplashScreen(),
     );
@@ -476,11 +502,16 @@ class _OrderPageState extends State<OrderPage> {
                         Expanded(
                           child: InkWell(
                             onTap: pickStartDate,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(16),
                             child: InputDecorator(
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Dari',
-                                prefixIcon: Icon(Icons.date_range),
+                                prefixIcon: const Icon(Icons.date_range_outlined),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
                               ),
                               child: Text(_dateFormat.format(tempStart)),
                             ),
@@ -490,11 +521,16 @@ class _OrderPageState extends State<OrderPage> {
                         Expanded(
                           child: InkWell(
                             onTap: pickEndDate,
-                            borderRadius: BorderRadius.circular(12),
+                            borderRadius: BorderRadius.circular(16),
                             child: InputDecorator(
-                              decoration: const InputDecoration(
+                              decoration: InputDecoration(
                                 labelText: 'Sampai',
-                                prefixIcon: Icon(Icons.event),
+                                prefixIcon: const Icon(Icons.event_outlined),
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                ),
                               ),
                               child: Text(_dateFormat.format(tempEnd)),
                             ),
@@ -671,9 +707,14 @@ class _OrderPageState extends State<OrderPage> {
                     children: [
                       TextField(
                         controller: customerController,
-                        decoration: const InputDecoration(
-                          labelText: 'Nama pembeli',
-                          prefixIcon: Icon(Icons.person),
+                        decoration: InputDecoration(
+                          labelText: 'Nama Pembeli',
+                          prefixIcon: const Icon(Icons.person_outline),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -689,11 +730,16 @@ class _OrderPageState extends State<OrderPage> {
                             setModalState(() => selectedOrderDate = picked);
                           }
                         },
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                         child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Tanggal order masuk',
-                            prefixIcon: Icon(Icons.edit_calendar),
+                          decoration: InputDecoration(
+                            labelText: 'Tgl Order Masuk',
+                            prefixIcon: const Icon(Icons.edit_calendar),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
                           ),
                           child: Text(_dateFormat.format(selectedOrderDate)),
                         ),
@@ -711,11 +757,16 @@ class _OrderPageState extends State<OrderPage> {
                             setModalState(() => selectedPickupDate = picked);
                           }
                         },
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                         child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Tanggal diambil pembeli',
-                            prefixIcon: Icon(Icons.event_available),
+                          decoration: InputDecoration(
+                            labelText: 'Tgl Pengambilan',
+                            prefixIcon: const Icon(Icons.event_available),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(color: Colors.grey.shade300),
+                            ),
                           ),
                           child: Text(_dateFormat.format(selectedPickupDate)),
                         ),
@@ -726,9 +777,14 @@ class _OrderPageState extends State<OrderPage> {
                         keyboardType: const TextInputType.numberWithOptions(
                           decimal: true,
                         ),
-                        decoration: const InputDecoration(
-                          labelText: 'Bobot kue cina (kg)',
-                          prefixIcon: Icon(Icons.scale),
+                        decoration: InputDecoration(
+                          labelText: 'Bobot Kue (kg)',
+                          prefixIcon: const Icon(Icons.scale_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 12),
@@ -1060,83 +1116,168 @@ class _OrderPageState extends State<OrderPage> {
 
   Widget _buildInputTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Input Order Baru',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          constraints: const BoxConstraints(maxWidth: 550),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(Icons.add_shopping_cart, color: Colors.deepOrange, size: 28),
+                    ),
+                    const SizedBox(width: 16),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Input Order Baru',
+                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+                          ),
+                          SizedBox(height: 4),
+                          Text(
+                            'Tambahkan data pesanan pelanggan',
+                            style: TextStyle(fontSize: 14, color: Colors.black54),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.blue.shade100),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Harga kue cina: ${_currencyFormat.format(45000)} / kg',
-                    style: const TextStyle(fontSize: 15),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Harga saat ini: ${_currencyFormat.format(45000)} / kg',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.blue.shade800),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 20),
+                ),
+                const SizedBox(height: 32),
                   TextField(
                     controller: _customerController,
-                    decoration: const InputDecoration(
-                      labelText: 'Nama pembeli',
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  InkWell(
-                    onTap: _pickOrderDate,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Tanggal order masuk',
-                        prefixIcon: Icon(Icons.edit_calendar),
-                      ),
-                      child: Text(
-                        _formatDateOrPlaceholder(_orderDate, 'Pilih tanggal'),
+                    decoration: InputDecoration(
+                      labelText: 'Nama Pembeli',
+                      hintText: 'Masukkan nama pelanggan',
+                      prefixIcon: const Icon(Icons.person_outline),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  InkWell(
-                    onTap: _pickPickupDate,
-                    borderRadius: BorderRadius.circular(12),
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Tanggal diambil pembeli',
-                        prefixIcon: Icon(Icons.event_available),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: _pickOrderDate,
+                          borderRadius: BorderRadius.circular(16),
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Tgl Order Masuk',
+                              prefixIcon: const Icon(Icons.edit_calendar),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide(color: Colors.grey.shade300),
+                              ),
+                            ),
+                            child: Text(
+                              _formatDateOrPlaceholder(_orderDate, 'Pilih tanggal'),
+                              style: TextStyle(color: _orderDate == null ? Colors.black54 : Colors.black87),
+                            ),
+                          ),
+                        ),
                       ),
-                      child: Text(
-                        _formatDateOrPlaceholder(_pickupDate, 'Pilih tanggal'),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: InkWell(
+                          onTap: _pickPickupDate,
+                          borderRadius: BorderRadius.circular(16),
+                          child: InputDecorator(
+                            decoration: InputDecoration(
+                              labelText: 'Tgl Pengambilan',
+                              prefixIcon: const Icon(Icons.event_available),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                borderSide: BorderSide(color: Colors.grey.shade300),
+                              ),
+                            ),
+                            child: Text(
+                              _formatDateOrPlaceholder(_pickupDate, 'Pilih tanggal'),
+                              style: TextStyle(color: _pickupDate == null ? Colors.black54 : Colors.black87),
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   TextField(
                     controller: _weightController,
                     keyboardType: const TextInputType.numberWithOptions(
                       decimal: true,
                     ),
-                    decoration: const InputDecoration(
-                      labelText: 'Bobot kue cina (kg)',
-                      prefixIcon: Icon(Icons.scale),
+                    decoration: InputDecoration(
+                      labelText: 'Bobot Kue (kg)',
                       hintText: 'Contoh: 1 atau 2.5',
+                      prefixIcon: const Icon(Icons.scale_outlined),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 40),
                   SizedBox(
                     width: double.infinity,
-                    height: 50,
+                    height: 56,
                     child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        backgroundColor: Colors.deepOrange,
+                        elevation: 2,
+                      ),
                       onPressed: _addOrder,
-                      icon: const Icon(Icons.add),
+                      icon: const Icon(Icons.save_alt, size: 24),
                       label: const Text(
                         'Simpan Order',
-                        style: TextStyle(fontSize: 16),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -1145,8 +1286,7 @@ class _OrderPageState extends State<OrderPage> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildEmptyOrderState() {
@@ -1249,60 +1389,78 @@ class _OrderPageState extends State<OrderPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Filter Tanggal Order',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.04),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(Icons.calendar_month_outlined, color: Colors.blue.shade700, size: 24),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Filter Tanggal Order',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    InkWell(
+                      onTap: _pickDateRange,
+                      borderRadius: BorderRadius.circular(16),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Rentang Tanggal',
+                          prefixIcon: const Icon(Icons.date_range_outlined),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                        ),
+                        child: Text(
+                          _formatRangeText(),
+                          style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      InkWell(
-                        onTap: _pickDateRange,
-                        borderRadius: BorderRadius.circular(12),
-                        child: InputDecorator(
-                          decoration: const InputDecoration(
-                            labelText: 'Rentang tanggal',
-                            prefixIcon: Icon(Icons.date_range),
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 8,
-                            ),
-                          ),
-                          child: Text(_formatRangeText()),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          OutlinedButton(
-                            onPressed: _setToday,
-                            child: const Text('Hari ini'),
-                          ),
-                          OutlinedButton(
-                            onPressed: _setThisMonth,
-                            child: const Text('Bulan ini'),
-                          ),
-                          OutlinedButton(
-                            onPressed: _setLast7Days,
-                            child: const Text('7 hari'),
-                          ),
-                          OutlinedButton(
-                            onPressed: _clearFilter,
-                            child: const Text('Semua'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        _buildQuickFilterBtn('Hari ini', _setToday),
+                        _buildQuickFilterBtn('Bulan ini', _setThisMonth),
+                        _buildQuickFilterBtn('7 Hari', _setLast7Days),
+                        _buildQuickFilterBtn('Semua', _clearFilter),
+                      ],
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),
@@ -1356,58 +1514,72 @@ class _OrderPageState extends State<OrderPage> {
                 color: Colors.green,
                 fullWidth: true,
               ),
-              const SizedBox(height: 20),
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text(
-            'Daftar Pesanan',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          Container(
-            height: 36,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey.shade300),
-            ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<SortMode>(
-                value: _sortMode,
-                icon: const Icon(Icons.sort, size: 18, color: Colors.deepOrange),
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
-                items: const [
-                  DropdownMenuItem(value: SortMode.name, child: Text('Urut Abjad Nama')),
-                  DropdownMenuItem(value: SortMode.nearestPickup, child: Text('Ambil Terdekat')),
+              const SizedBox(height: 40),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Daftar Pesanan',
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+                  ),
+                  Container(
+                    height: 48,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<SortMode>(
+                        value: _sortMode,
+                        icon: const Icon(Icons.sort, color: Colors.deepOrange),
+                        style: TextStyle(fontSize: 14, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                        items: const [
+                          DropdownMenuItem(value: SortMode.name, child: Text('Urut Abjad')),
+                          DropdownMenuItem(value: SortMode.nearestPickup, child: Text('Ambil Terdekat')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _sortMode = val;
+                              _currentPage = 0;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                  ),
                 ],
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() {
-                      _sortMode = val;
-                      _currentPage = 0;
-                    });
-                  }
-                },
               ),
-            ),
-          ),
-        ],
-      ),
-              const SizedBox(height: 12),
-            TextField(
-              controller: _searchController,
-              onChanged: (value) => setState(() {
-                _searchQuery = value;
-                _currentPage = 0;
-              }),
-              decoration: const InputDecoration(
-                labelText: 'Cari Nama Pembeli...',
-                prefixIcon: Icon(Icons.search),
-                isDense: true,
+              const SizedBox(height: 16),
+              TextField(
+                controller: _searchController,
+                onChanged: (value) => setState(() {
+                  _searchQuery = value;
+                  _currentPage = 0;
+                }),
+                decoration: InputDecoration(
+                  hintText: 'Cari nama pembeli...',
+                  prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: Colors.grey.shade200),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: Colors.deepOrange.shade300),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 24),
         if (groupedEntries.isEmpty)
                 Container(
                   width: double.infinity,
@@ -1679,13 +1851,13 @@ class _OrderPageState extends State<OrderPage> {
   Widget _buildQuickFilterBtn(String label, VoidCallback onTap) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.grey.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade300),
         ),
         child: Text(
           label,
@@ -1713,7 +1885,7 @@ class _OrderPageState extends State<OrderPage> {
         side: BorderSide(
           color: color?.withOpacity(0.3) ?? Colors.blue.withOpacity(0.3),
         ),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
