@@ -11,6 +11,9 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'dart:ui' as ui;
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -229,6 +232,7 @@ class _OrderPageState extends State<OrderPage> {
   int _currentPage = 0;
   final int _itemsPerPage = 3; // Menampilkan 3 pembeli per halaman
 
+  bool _isScanning = true;
   SortMode _sortMode = SortMode.name;
 
   final TextEditingController _customerController = TextEditingController();
@@ -296,45 +300,117 @@ class _OrderPageState extends State<OrderPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.notifications_active, color: Colors.orange),
-              SizedBox(width: 8),
-              Text('Pengingat Pesanan!'),
-            ],
+          titlePadding: const EdgeInsets.all(0),
+          contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          actionsPadding:
+              const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          title: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.orange.shade50,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+              ),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.notifications_active,
+                    color: Colors.orange, size: 28),
+                SizedBox(width: 16),
+                Text('Pengingat Pesanan!',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              ],
+            ),
           ),
           content: SizedBox(
-            width: 400,
+            width: 450,
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
-                children: upcomingOrders.map((o) {
-                  final isToday = DateTime(o.pickupDate.year,
-                          o.pickupDate.month, o.pickupDate.day) ==
-                      today;
-                  return ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Icon(
-                      isToday ? Icons.warning : Icons.schedule,
-                      color: isToday ? Colors.red : Colors.orange,
-                    ),
-                    title: Text(
-                      o.customerName,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                        isToday ? 'Jadwal Ambil: HARI INI' : 'Jadwal Ambil: BESOK'),
-                    trailing: Text(
-                      '${o.weightKg} kg',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 14),
-                    ),
-                  );
-                }).toList(),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ada ${upcomingOrders.length} pesanan yang akan diambil dalam waktu dekat.',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 15),
+                  ),
+                  const SizedBox(height: 20),
+                  ...upcomingOrders.map((o) {
+                    final isToday = DateTime(o.pickupDate.year,
+                            o.pickupDate.month, o.pickupDate.day)
+                        .isAtSameMomentAs(today);
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: isToday
+                                ? Colors.red.shade200
+                                : Colors.orange.shade200),
+                        color: isToday
+                            ? Colors.red.shade50
+                            : Colors.orange.shade50,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            isToday
+                                ? Icons.warning_amber_rounded
+                                : Icons.schedule,
+                            color: isToday
+                                ? Colors.red.shade700
+                                : Colors.orange.shade700,
+                            size: 28,
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(o.customerName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16)),
+                                const SizedBox(height: 4),
+                                Text(
+                                    isToday
+                                        ? 'Ambil Hari ini'
+                                        : 'Ambil Besok',
+                                    style: TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                        color: isToday
+                                            ? Colors.red.shade800
+                                            : Colors.orange.shade800)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Text('${o.weightKg.toStringAsFixed(1)} kg',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 16)),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
           ),
           actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context); // Close dialog
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        ReminderPage(upcomingOrders: upcomingOrders),
+                  ),
+                );
+              },
+              child: const Text('Lihat Detail'),
+            ),
             FilledButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Tutup'),
@@ -676,7 +752,7 @@ class _OrderPageState extends State<OrderPage> {
       _weightController.clear();
       _orderDate = null;
       _pickupDate = null;
-      _selectedIndex = 1;
+      _selectedIndex = 2; // Ubah ke 2 agar beralih ke 'Daftar Order' (karena tab 1 sekarang 'Scan QR')
       _currentPage = 0;
     });
 
@@ -854,6 +930,132 @@ class _OrderPageState extends State<OrderPage> {
     setState(() => _orders.remove(item));
     await _saveOrders();
     _showSnackBar('Order berhasil dihapus.');
+  }
+
+  void _showQrCode(OrderItem item) {
+    // 1. Siapkan format data untuk QR Code
+    final qrData = 'Nama: ${item.customerName}\n'
+        'Bobot: ${item.weightKg.toStringAsFixed(1)} kg\n'
+        'Total: ${_currencyFormat.format(item.totalPrice)}\n'
+        'Tgl Ambil: ${_dateFormat.format(item.pickupDate)}';
+
+    // 2. Tampilkan dalam bentuk Pop-up Dialog
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('QR Code Pesanan', textAlign: TextAlign.center),
+          content: SizedBox(
+            width: 320,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: SizedBox(
+                      width: 200,
+                      height: 200,
+                      child: QrImageView(
+                        data: qrData,
+                        version: QrVersions.auto,
+                        size: 200.0,
+                        backgroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    item.customerName,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${item.weightKg.toStringAsFixed(1)} kg • ${_currencyFormat.format(item.totalPrice)}\nAmbil: ${_dateFormat.format(item.pickupDate)}',
+                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Tutup'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(context); // Tutup dialog sebelum proses download
+                _downloadQrCode(item, qrData);
+              },
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('Download'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _downloadQrCode(OrderItem item, String qrData) async {
+    try {
+      // Validasi dan generate QR Code
+      final qrValidationResult = QrValidator.validate(
+        data: qrData,
+        version: QrVersions.auto,
+        errorCorrectionLevel: QrErrorCorrectLevel.L,
+      );
+
+      if (qrValidationResult.status == QrValidationStatus.valid) {
+        final qrCode = qrValidationResult.qrCode!;
+        final painter = QrPainter.withQr(
+          qr: qrCode,
+          color: const Color(0xFF000000), // Warna QR Hitam
+          emptyColor: const Color(0xFFFFFFFF), // Background Putih
+          gapless: true,
+        );
+
+        // Render QR Code jadi Gambar resolusi tinggi (1024x1024)
+        final picData = await painter.toImageData(1024, format: ui.ImageByteFormat.png);
+        if (picData == null) return;
+
+        final bytes = picData.buffer.asUint8List();
+
+        Directory? directory;
+        if (Platform.isAndroid) {
+          directory = await getExternalStorageDirectory();
+        } else if (Platform.isIOS) {
+          directory = await getApplicationDocumentsDirectory();
+        }
+
+        if (directory != null) {
+          final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+          final sanitizedName = item.customerName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
+          final filePath = '${directory.path}/QR_${sanitizedName}_$timestamp.png';
+          
+          final file = File(filePath);
+          await file.writeAsBytes(bytes, flush: true);
+          
+          _showSnackBar('QR Code berhasil didownload!');
+          
+          // Buka file gambarnya secara otomatis
+          final result = await OpenFilex.open(filePath);
+          if (result.type != ResultType.done) {
+            _showSnackBar('File tersimpan, tapi tidak ada aplikasi untuk membukanya.');
+          }
+        }
+      }
+    } catch (e) {
+      _showSnackBar('Gagal mendownload QR Code: $e');
+    }
   }
 
   Future<void> _importXlsx() async {
@@ -1348,6 +1550,180 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
+  void _processScannedQR(String qrData) {
+    setState(() {
+      _isScanning = false; // Jeda scan sementara agar pop-up tidak muncul ganda
+    });
+
+    try {
+      // Mencari pola Nama dan Bobot dari teks QR yang di-generate sebelumnya
+      final nameMatch = RegExp(r'Nama:\s*(.*?)\n').firstMatch(qrData);
+      final weightMatch = RegExp(r'Bobot:\s*([\d\.]+)\s*kg').firstMatch(qrData);
+
+      if (nameMatch != null && weightMatch != null) {
+        final parsedName = nameMatch.group(1)?.trim();
+        final parsedWeightStr = weightMatch.group(1)?.trim();
+
+        if (parsedName != null && parsedWeightStr != null) {
+          // Cari pesanan yang persis cocok
+          final matchingOrders = _orders.where((o) =>
+              o.customerName.toLowerCase() == parsedName.toLowerCase() &&
+              o.weightKg.toStringAsFixed(1) == parsedWeightStr
+          ).toList();
+
+          if (matchingOrders.isNotEmpty) {
+            // Prioritaskan membuka pesanan yang berstatus "Belum Diambil"
+            matchingOrders.sort((a, b) => a.isPickedUp ? 1 : -1);
+            final targetOrder = matchingOrders.first;
+
+            _showScannedOrderDialog(targetOrder);
+            return;
+          }
+        }
+      }
+
+      // Jika format tidak sesuai atau order sudah terhapus
+      _showSnackBar('QR Code tidak dikenali atau pesanan tidak ditemukan.');
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _isScanning = true);
+      });
+    } catch (e) {
+      _showSnackBar('Gagal memproses QR Code.');
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _isScanning = true);
+      });
+    }
+  }
+
+  void _showScannedOrderDialog(OrderItem order) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Pesanan Ditemukan!', textAlign: TextAlign.center),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.check_circle_outline, color: Colors.green, size: 64),
+              const SizedBox(height: 16),
+              Text(
+                order.customerName,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Column(
+                  children: [
+                    Text('Bobot: ${order.weightKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 15)),
+                    const SizedBox(height: 4),
+                    Text('Total: ${_currencyFormat.format(order.totalPrice)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 4),
+                    Text('Tgl Ambil: ${_dateFormat.format(order.pickupDate)}', style: const TextStyle(fontSize: 15)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              if (order.isPickedUp)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
+                  child: const Text('Status: SUDAH DIAMBIL', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                )
+              else
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
+                  child: const Text('Status: BELUM DIAMBIL', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                ),
+            ],
+          ),
+          actionsAlignment: MainAxisAlignment.center,
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                setState(() => _isScanning = true); // Lanjut mode scan
+              },
+              child: const Text('Tutup'),
+            ),
+            if (!order.isPickedUp)
+              FilledButton.icon(
+                onPressed: () async {
+                  setState(() {
+                    order.isPickedUp = true;
+                    _selectedIndex = 2; // Pindah ke tab daftar order
+                  });
+                  await _saveOrders();
+                  if (context.mounted) Navigator.pop(context);
+                  _showSnackBar('Order atas nama ${order.customerName} ditandai SUDAH DIAMBIL.');
+                  setState(() => _isScanning = true);
+                },
+                icon: const Icon(Icons.check),
+                label: const Text('Tandai Selesai'),
+              ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildScanTab() {
+    // Mengosongkan widget kamera saat tab tidak aktif untuk menghemat RAM dan Baterai HP
+    if (_selectedIndex != 1) return const SizedBox(); 
+
+    return Stack(
+      children: [
+        MobileScanner(
+          onDetect: (capture) {
+            if (!_isScanning) return;
+            for (final barcode in capture.barcodes) {
+              if (barcode.rawValue != null) {
+                _processScannedQR(barcode.rawValue!);
+                break;
+              }
+            }
+          },
+        ),
+        Center(
+          child: Container(
+            width: 250,
+            height: 250,
+            decoration: BoxDecoration(
+              border: Border.all(color: Colors.deepOrange, width: 4),
+              borderRadius: BorderRadius.circular(24),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: 80,
+          left: 0,
+          right: 0,
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text(
+                'Arahkan kamera ke QR Code Pesanan',
+                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildListTab() {
     if (_orders.isEmpty) {
       return _buildEmptyOrderState();
@@ -1784,6 +2160,11 @@ class _OrderPageState extends State<OrderPage> {
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton(
+                                  icon: const Icon(Icons.qr_code_2, color: Colors.deepPurple),
+                                  onPressed: () => _showQrCode(item),
+                                  tooltip: 'Tampilkan QR Code',
+                                ),
+                                IconButton(
                                   icon: const Icon(Icons.edit_outlined, color: Colors.blue),
                                   onPressed: () => _editOrder(item),
                                   tooltip: 'Edit',
@@ -1923,6 +2304,127 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
+  Widget _buildCustomBottomNav() {
+    return Container(
+      padding: const EdgeInsets.only(bottom: 12, top: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 24,
+            offset: const Offset(0, -4),
+          ),
+        ],
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: SafeArea(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            _buildNavItem(0, Icons.add_shopping_cart_outlined, Icons.add_shopping_cart, 'Input Order'),
+            _buildCenterNavItem(1, Icons.qr_code_scanner_outlined, Icons.qr_code_scanner, 'Scan QR'),
+            _buildNavItem(2, Icons.list_alt_outlined, Icons.list_alt, 'Daftar Order'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label) {
+    final isSelected = _selectedIndex == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _selectedIndex = index;
+            if (index == 1) _isScanning = true;
+          });
+        },
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.deepOrange.shade50 : Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Icon(
+                isSelected ? activeIcon : icon,
+                color: isSelected ? Colors.deepOrange : Colors.grey.shade400,
+                size: 26,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.deepOrange : Colors.grey.shade500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCenterNavItem(int index, IconData icon, IconData activeIcon, String label) {
+    final isSelected = _selectedIndex == index;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _selectedIndex = index;
+            if (index == 1) _isScanning = true;
+          });
+        },
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.deepOrange,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.deepOrange.withOpacity(isSelected ? 0.4 : 0.2),
+                    blurRadius: isSelected ? 12 : 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(
+                isSelected ? activeIcon : icon,
+                color: Colors.white,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: isSelected ? Colors.deepOrange : Colors.black87,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1971,29 +2473,11 @@ class _OrderPageState extends State<OrderPage> {
         index: _selectedIndex,
         children: [
           _buildInputTab(),
+          _buildScanTab(), // Menu Kamera
           _buildListTab(),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (int index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.add_shopping_cart_outlined),
-            selectedIcon: Icon(Icons.add_shopping_cart),
-            label: 'Input Order',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.list_alt_outlined),
-            selectedIcon: Icon(Icons.list_alt),
-            label: 'Daftar Order',
-          ),
-        ],
-      ),
+      bottomNavigationBar: _buildCustomBottomNav(),
     );
   }
 }
@@ -2007,28 +2491,49 @@ class ReminderPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    final dateFormat = DateFormat('dd MMMM yyyy', 'id_ID');
 
     return Scaffold(
+      backgroundColor: const Color(0xFFFFF8F3), // Match app's background
       appBar: AppBar(
-        title: const Text('Daftar Pengingat Pesanan'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        foregroundColor: Colors.black87,
+        title: const Text(
+          'Pengingat Pesanan',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
       ),
       body: upcomingOrders.isEmpty
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.notifications_off_outlined,
-                      size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text(
-                    'Tidak ada pengingat aktif.',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                ],
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.notifications_off_outlined,
+                        size: 80, color: Colors.grey.shade400),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Tidak Ada Pengingat',
+                      style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Tidak ada jadwal pengambilan pesanan untuk hari ini atau besok.',
+                      style: TextStyle(fontSize: 16, color: Colors.grey.shade500),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80),
               itemCount: upcomingOrders.length,
               itemBuilder: (context, index) {
                 final o = upcomingOrders[index];
@@ -2036,37 +2541,112 @@ class ReminderPage extends StatelessWidget {
                         o.pickupDate.day)
                     .isAtSameMomentAs(today);
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  elevation: 1,
+                  margin: const EdgeInsets.only(bottom: 16),
+                  elevation: 2,
+                  shadowColor: (isToday ? Colors.red : Colors.orange).withOpacity(0.2),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(16),
                     side: BorderSide(
                       color: isToday
-                          ? Colors.red.shade100
-                          : Colors.orange.shade100,
+                          ? Colors.red.shade200
+                          : Colors.orange.shade200,
+                      width: 1,
                     ),
                   ),
-                  child: ListTile(
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                    leading: Icon(
-                      isToday ? Icons.warning_amber_rounded : Icons.schedule,
-                      color: isToday ? Colors.red : Colors.orange,
-                      size: 32,
-                    ),
-                    title: Text(o.customerName,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 17)),
-                    subtitle: Text(
-                        isToday ? 'Ambil HARI INI' : 'Ambil BESOK',
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
-                    trailing: Text('${o.weightKg} kg',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 16)),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        color: isToday
+                            ? Colors.red.shade50
+                            : Colors.orange.shade50,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isToday
+                                  ? Icons.warning_amber_rounded
+                                  : Icons.schedule,
+                              color: isToday
+                                  ? Colors.red.shade700
+                                  : Colors.orange.shade700,
+                              size: 24,
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              isToday ? 'Ambil HARI INI' : 'Ambil BESOK',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: isToday
+                                    ? Colors.red.shade800
+                                    : Colors.orange.shade800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              o.customerName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 20,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildInfoRow(
+                              context: context,
+                              icon: Icons.scale_outlined,
+                              label: 'Bobot Pesanan',
+                              value: '${o.weightKg.toStringAsFixed(1)} kg',
+                            ),
+                            const SizedBox(height: 12),
+                            _buildInfoRow(
+                              context: context,
+                              icon: Icons.calendar_today_outlined,
+                              label: 'Tanggal Ambil',
+                              value: dateFormat.format(o.pickupDate),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 );
               },
             ),
+    );
+  }
+
+  Widget _buildInfoRow(
+      {required BuildContext context,
+      required IconData icon,
+      required String label,
+      required String value}) {
+    return Row(
+      children: [
+        Icon(icon, color: Colors.grey.shade600, size: 20),
+        const SizedBox(width: 12),
+        Text(label,
+            style: TextStyle(
+                color: Colors.black54,
+                fontSize: 15,
+                fontWeight: FontWeight.w500)),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+              fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
+        ),
+      ],
     );
   }
 }
