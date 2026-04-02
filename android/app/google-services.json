@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "821168628456",
+    "project_id": "pesan-keranjang",
+    "storage_bucket": "pesan-keranjang.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:821168628456:android:b740c76cd07bd26b929f5d",
+        "android_client_info": {
+          "package_name": "com.example.kue_cina_order_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB0oNWOY9f_fUf3u6nNg3hr6lL-Ngfeww4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

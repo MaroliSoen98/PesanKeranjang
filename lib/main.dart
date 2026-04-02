@@ -12,11 +12,26 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:ui' as ui;
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'firebase_options.dart'; // File hasil generate dari flutterfire CLI
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  debugPrint("Handling a background message: ${message.messageId}");
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await initializeDateFormatting('id_ID', null);
   runApp(const KueCinaApp());
 }
@@ -88,10 +103,13 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _initializeApp() async {
+    // Setup Notifikasi Firebase
+    await _setupPushNotifications();
+
     // 1. Ambil versi aplikasi & data dari SharedPreferences secara bersamaan
     final (packageInfo, loadedOrders) = await (
       PackageInfo.fromPlatform(),
-      _loadOrdersFromPrefs(),
+      _loadOrdersFromFirestore(),
     ).wait;
 
     if (!mounted) return;
@@ -114,17 +132,50 @@ class _SplashScreenState extends State<SplashScreen> {
     );
   }
 
-  Future<List<OrderItem>> _loadOrdersFromPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('saved_orders');
-    if (raw == null || raw.isEmpty) return [];
+  Future<void> _setupPushNotifications() async {
+    FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+    // Meminta izin kepada user (Wajib untuk Android 13+ dan iOS)
+    NotificationSettings settings = await messaging.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+    );
+
+    if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+      // Berlangganan ke topik agar menerima push notif otomatis dari server Firebase
+      if (!kIsWeb && Platform.isAndroid) {
+        await messaging.subscribeToTopic('pesanan_admin');
+      }
+
+      // Ambil token unik HP ini (berguna jika ingin kirim notif ke HP spesifik)
+      String? token = await messaging.getToken();
+      debugPrint('FCM Token HP ini: $token');
+
+      // Menangani notifikasi saat aplikasi SEDANG DIBUKA (Foreground)
+      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+        if (message.notification != null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('🔔 ${message.notification!.title}: ${message.notification!.body}'),
+              backgroundColor: Colors.deepOrange,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
+      });
+    }
+  }
+
+  Future<List<OrderItem>> _loadOrdersFromFirestore() async {
     try {
-      final List<dynamic> decoded = jsonDecode(raw);
-      return decoded
-          .map((item) => OrderItem.fromJson(Map<String, dynamic>.from(item)))
+      final snapshot =
+          await FirebaseFirestore.instance.collection('orders').get();
+      return snapshot.docs
+          .map((doc) => OrderItem.fromJson(doc.data(), doc.id))
           .toList();
     } catch (e) {
-      debugPrint('Gagal parse orders dari SharedPreferences: $e');
+      debugPrint('Gagal load orders dari Firestore: $e');
       return [];
     }
   }
@@ -170,6 +221,7 @@ class _SplashScreenState extends State<SplashScreen> {
 }
 
 class OrderItem {
+  String? id; // ID Dokumen dari Firestore
   String customerName;
   DateTime orderDate;
   DateTime pickupDate;
@@ -177,6 +229,7 @@ class OrderItem {
   bool isPickedUp;
 
   OrderItem({
+    this.id,
     required this.customerName,
     required this.orderDate,
     required this.pickupDate,
@@ -203,8 +256,9 @@ class OrderItem {
     };
   }
 
-  factory OrderItem.fromJson(Map<String, dynamic> json) {
+  factory OrderItem.fromJson(Map<String, dynamic> json, [String? docId]) {
     return OrderItem(
+      id: docId,
       customerName: json['customerName'] ?? '',
       orderDate: DateTime.parse(json['orderDate']),
       pickupDate: DateTime.parse(json['pickupDate']),
@@ -226,8 +280,6 @@ class OrderPage extends StatefulWidget {
 }
 
 class _OrderPageState extends State<OrderPage> {
-  static const String _ordersStorageKey = 'saved_orders';
-
   int _selectedIndex = 0;
   int _currentPage = 0;
   final int _itemsPerPage = 3; // Menampilkan 3 pembeli per halaman
@@ -278,12 +330,6 @@ class _OrderPageState extends State<OrderPage> {
     _weightController.dispose();
     _searchController.dispose();
     super.dispose();
-  }
-
-  Future<void> _saveOrders() async {
-    final prefs = await SharedPreferences.getInstance();
-    final jsonList = _orders.map((item) => item.toJson()).toList();
-    await prefs.setString(_ordersStorageKey, jsonEncode(jsonList));
   }
 
   void _checkReminders() {
@@ -738,26 +784,36 @@ class _OrderPageState extends State<OrderPage> {
       return;
     }
 
-    setState(() {
-      _orders.add(
-        OrderItem(
-          customerName: customerName,
-          orderDate: _orderDate!,
-          pickupDate: _pickupDate!,
-          weightKg: weightKg,
-          isPickedUp: false,
-        ),
-      );
-      _customerController.clear();
-      _weightController.clear();
-      _orderDate = null;
-      _pickupDate = null;
-      _selectedIndex = 2; // Ubah ke 2 agar beralih ke 'Daftar Order' (karena tab 1 sekarang 'Scan QR')
-      _currentPage = 0;
-    });
+    final newItem = OrderItem(
+      customerName: customerName,
+      orderDate: _orderDate!,
+      pickupDate: _pickupDate!,
+      weightKg: weightKg,
+      isPickedUp: false,
+    );
 
-    await _saveOrders();
-    _showSnackBar('Order berhasil ditambahkan.');
+    try {
+      // Simpan ke Firestore
+      final docRef = await FirebaseFirestore.instance
+          .collection('orders')
+          .add(newItem.toJson());
+      
+      newItem.id = docRef.id; // Assign ID hasil generate Firestore ke model lokal
+
+      setState(() {
+        _orders.add(newItem);
+        _customerController.clear();
+        _weightController.clear();
+        _orderDate = null;
+        _pickupDate = null;
+        _selectedIndex = 2; // Ubah ke 2 agar beralih ke 'Daftar Order' (karena tab 1 sekarang 'Scan QR')
+        _currentPage = 0;
+      });
+
+      _showSnackBar('Berhasil! Order disimpan ke database Firebase.');
+    } catch (e) {
+      _showSnackBar('Gagal menyimpan ke database: $e');
+    }
   }
 
   Future<void> _editOrder(OrderItem item) async {
@@ -905,6 +961,18 @@ class _OrderPageState extends State<OrderPage> {
                     return;
                   }
 
+                    // Update spesifik dokumen di Firestore
+                    await FirebaseFirestore.instance
+                        .collection('orders')
+                        .doc(item.id)
+                        .update({
+                      'customerName': updatedName,
+                      'orderDate': selectedOrderDate.toIso8601String(),
+                      'pickupDate': selectedPickupDate.toIso8601String(),
+                      'weightKg': updatedWeight,
+                      'isPickedUp': selectedPickedUp,
+                    });
+
                     setState(() {
                       item.customerName = updatedName;
                       item.orderDate = selectedOrderDate;
@@ -912,7 +980,6 @@ class _OrderPageState extends State<OrderPage> {
                       item.weightKg = updatedWeight;
                       item.isPickedUp = selectedPickedUp;
                     });
-                    await _saveOrders();
                     if (mounted) Navigator.pop(context);
                     _showSnackBar('Order berhasil diperbarui.');
                   },
@@ -927,8 +994,10 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   Future<void> _deleteOrder(OrderItem item) async {
+    // Hapus dari Firestore berdasarkan ID-nya
+    await FirebaseFirestore.instance.collection('orders').doc(item.id).delete();
+    
     setState(() => _orders.remove(item));
-    await _saveOrders();
     _showSnackBar('Order berhasil dihapus.');
   }
 
@@ -1080,13 +1149,31 @@ class _OrderPageState extends State<OrderPage> {
       final importedOrders =
           _parseOrdersFromSheet(workbook.tables[workbook.tables.keys.first]!);
 
+      // Operasi massal (Batch Write) Firestore
+      final batch = FirebaseFirestore.instance.batch();
+      final collection = FirebaseFirestore.instance.collection('orders');
+
+      // Hapus data lama di database (opsional: agar sesuai logika sebelumnya yg me-replace list)
+      final oldDocs = await collection.get();
+      for (var doc in oldDocs.docs) {
+        batch.delete(doc.reference);
+      }
+
+      // Masukkan data import yang baru
+      for (var item in importedOrders) {
+        final docRef = collection.doc();
+        item.id = docRef.id;
+        batch.set(docRef, item.toJson());
+      }
+
+      await batch.commit(); // Eksekusi sekaligus
+
       setState(() {
         _orders.clear();
         _orders.addAll(importedOrders);
         _currentPage = 0;
       });
 
-      await _saveOrders();
       _showSnackBar('Import XLSX berhasil. ${importedOrders.length} order dimuat.');
     } catch (e) {
       _showSnackBar('Gagal import XLSX: $e');
@@ -1657,11 +1744,16 @@ class _OrderPageState extends State<OrderPage> {
             if (!order.isPickedUp)
               FilledButton.icon(
                 onPressed: () async {
+                  // Update ke Firestore
+                  await FirebaseFirestore.instance
+                      .collection('orders')
+                      .doc(order.id)
+                      .update({'isPickedUp': true});
+
                   setState(() {
                     order.isPickedUp = true;
                     _selectedIndex = 2; // Pindah ke tab daftar order
                   });
-                  await _saveOrders();
                   if (context.mounted) Navigator.pop(context);
                   _showSnackBar('Order atas nama ${order.customerName} ditandai SUDAH DIAMBIL.');
                   setState(() => _isScanning = true);
@@ -2121,10 +2213,14 @@ class _OrderPageState extends State<OrderPage> {
                                 Expanded(
                                   child: InkWell(
                                     onTap: () async {
+                                      // Update toggle di Firestore
+                                      await FirebaseFirestore.instance
+                                          .collection('orders')
+                                          .doc(item.id)
+                                          .update({'isPickedUp': !item.isPickedUp});
                                       setState(() {
                                         item.isPickedUp = !item.isPickedUp;
                                       });
-                                      await _saveOrders();
                                     },
                                     borderRadius: BorderRadius.circular(8),
                                     child: Container(
