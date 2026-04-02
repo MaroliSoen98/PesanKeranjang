@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:async';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:excel/excel.dart' as excel;
@@ -19,6 +20,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart'; // File hasil generate dari flutterfire CLI
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:http/http.dart' as http;
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -26,12 +28,16 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint("Handling a background message: ${message.messageId}");
 }
 
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  if (!kIsWeb) {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  }
   await initializeDateFormatting('id_ID', null);
   runApp(const KueCinaApp());
 }
@@ -43,6 +49,7 @@ class KueCinaApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
       title: 'Pesan Keranjang',
       theme: ThemeData(
         useMaterial3: true,
@@ -104,7 +111,11 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _initializeApp() async {
     // Setup Notifikasi Firebase
-    await _setupPushNotifications();
+    try {
+      await _setupPushNotifications();
+    } catch (e) {
+      debugPrint('Setup Push Notif Error: $e');
+    }
 
     // 1. Ambil versi aplikasi & data dari SharedPreferences secara bersamaan
     final (packageInfo, loadedOrders) = await (
@@ -154,8 +165,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
       // Menangani notifikasi saat aplikasi SEDANG DIBUKA (Foreground)
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        if (message.notification != null && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+        if (message.notification != null) {
+          rootScaffoldMessengerKey.currentState?.showSnackBar(
             SnackBar(
               content: Text('🔔 ${message.notification!.title}: ${message.notification!.body}'),
               backgroundColor: Colors.deepOrange,
@@ -209,7 +220,7 @@ class _SplashScreenState extends State<SplashScreen> {
             Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: const EdgeInsets.only(bottom: 32.0),
+                padding: const EdgeInsets.only(bottom: 64.0),
                 child: Text(_appVersion, style: TextStyle(color: Colors.grey.shade600)),
               ),
             ),
@@ -287,6 +298,8 @@ class _OrderPageState extends State<OrderPage> {
   bool _isScanning = true;
   SortMode _sortMode = SortMode.name;
 
+  StreamSubscription<QuerySnapshot>? _ordersSubscription;
+
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
 
@@ -314,6 +327,21 @@ class _OrderPageState extends State<OrderPage> {
     _orders.addAll(widget.initialOrders);
     _setThisMonth();
 
+    // Mulai mendengarkan perubahan Firestore secara real-time
+    _ordersSubscription = FirebaseFirestore.instance
+        .collection('orders')
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      final updatedOrders = snapshot.docs
+          .map((doc) => OrderItem.fromJson(doc.data(), doc.id))
+          .toList();
+      setState(() {
+        _orders.clear();
+        _orders.addAll(updatedOrders);
+      });
+    });
+
     // Jika ada order yang perlu diingatkan, dialog akan muncul setelah halaman ini selesai dibangun
     if (_orders.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -326,6 +354,7 @@ class _OrderPageState extends State<OrderPage> {
 
   @override
   void dispose() {
+    _ordersSubscription?.cancel();
     _customerController.dispose();
     _weightController.dispose();
     _searchController.dispose();
@@ -800,8 +829,24 @@ class _OrderPageState extends State<OrderPage> {
       
       newItem.id = docRef.id; // Assign ID hasil generate Firestore ke model lokal
 
+      // Panggil API Vercel untuk Broadcast Notifikasi ke Semua Admin
+      try {
+        final response = await http.post(
+          Uri.parse('https://pesan-keranjang-backend.vercel.app/api/notify'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'customerName': newItem.customerName,
+            'weightKg': newItem.weightKg,
+          }),
+        );
+        if (response.statusCode != 200) {
+          debugPrint('Vercel API Error: ${response.body}');
+        }
+      } catch (e) {
+        debugPrint('Gagal menghubungi server Vercel: $e');
+      }
+
       setState(() {
-        _orders.add(newItem);
         _customerController.clear();
         _weightController.clear();
         _orderDate = null;
@@ -973,13 +1018,6 @@ class _OrderPageState extends State<OrderPage> {
                       'isPickedUp': selectedPickedUp,
                     });
 
-                    setState(() {
-                      item.customerName = updatedName;
-                      item.orderDate = selectedOrderDate;
-                      item.pickupDate = selectedPickupDate;
-                      item.weightKg = updatedWeight;
-                      item.isPickedUp = selectedPickedUp;
-                    });
                     if (mounted) Navigator.pop(context);
                     _showSnackBar('Order berhasil diperbarui.');
                   },
@@ -997,7 +1035,6 @@ class _OrderPageState extends State<OrderPage> {
     // Hapus dari Firestore berdasarkan ID-nya
     await FirebaseFirestore.instance.collection('orders').doc(item.id).delete();
     
-    setState(() => _orders.remove(item));
     _showSnackBar('Order berhasil dihapus.');
   }
 
@@ -1099,9 +1136,9 @@ class _OrderPageState extends State<OrderPage> {
         final bytes = picData.buffer.asUint8List();
 
         Directory? directory;
-        if (Platform.isAndroid) {
+        if (!kIsWeb && Platform.isAndroid) {
           directory = await getExternalStorageDirectory();
-        } else if (Platform.isIOS) {
+        } else if (!kIsWeb && Platform.isIOS) {
           directory = await getApplicationDocumentsDirectory();
         }
 
@@ -1169,8 +1206,6 @@ class _OrderPageState extends State<OrderPage> {
       await batch.commit(); // Eksekusi sekaligus
 
       setState(() {
-        _orders.clear();
-        _orders.addAll(importedOrders);
         _currentPage = 0;
       });
 
@@ -1276,9 +1311,9 @@ class _OrderPageState extends State<OrderPage> {
       final fileBytes = Uint8List.fromList(encoded);
 
       Directory? directory;
-      if (Platform.isAndroid) {
+      if (!kIsWeb && Platform.isAndroid) {
         directory = await getExternalStorageDirectory();
-      } else if (Platform.isIOS) {
+      } else if (!kIsWeb && Platform.isIOS) {
         directory = await getApplicationDocumentsDirectory();
       }
 
@@ -1751,7 +1786,6 @@ class _OrderPageState extends State<OrderPage> {
                       .update({'isPickedUp': true});
 
                   setState(() {
-                    order.isPickedUp = true;
                     _selectedIndex = 2; // Pindah ke tab daftar order
                   });
                   if (context.mounted) Navigator.pop(context);
@@ -2218,9 +2252,6 @@ class _OrderPageState extends State<OrderPage> {
                                           .collection('orders')
                                           .doc(item.id)
                                           .update({'isPickedUp': !item.isPickedUp});
-                                      setState(() {
-                                        item.isPickedUp = !item.isPickedUp;
-                                      });
                                     },
                                     borderRadius: BorderRadius.circular(8),
                                     child: Container(
