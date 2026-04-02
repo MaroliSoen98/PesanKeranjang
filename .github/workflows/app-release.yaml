@@ -5,7 +5,6 @@ on:
     branches:
       - main
 
-# PENTING: Berikan izin ke GitHub Actions untuk membuat Rilis
 permissions:
   contents: write
 
@@ -32,24 +31,24 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      # Langkah yang diupdate: Build APK dengan suntikan versi otomatis
-      - name: Build APK Release
-        run: flutter build apk --release --build-name=1.0.${{ github.run_number }} --build-number=${{ github.run_number }}
+      # LANGKAH BARU: Sinkronisasi versi pubspec.yaml dengan github.run_number
+      - name: Update Version in pubspec.yaml
+        run: |
+          sed -i "s/^version: .*/version: 1.0.${{ github.run_number }}+${{ github.run_number }}/" pubspec.yaml
 
-      # Langkah baru: Ganti nama file APK supaya rapi dan tidak saling timpa
+      # Langkah Build: Sekarang otomatis menggunakan versi dari pubspec yang sudah diupdate
+      - name: Build APK Release
+        run: flutter build apk --release
+
       - name: Rename APK File
         run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PesanKeranjang-v1.0.${{ github.run_number }}.apk
 
-      # Langkah yang diupdate: Membuat Release dan melampirkan APK baru
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          # Membuat penamaan versi otomatis (contoh: v1.0.1, v1.0.2)
           tag_name: v1.0.${{ github.run_number }}
           name: PesanKeranjang v1.0.${{ github.run_number }}
           body: "Rilis otomatis APK terbaru dari branch main versi 1.0.${{ github.run_number }}."
-          # Path file APK disesuaikan dengan nama yang baru di-rename
           files: build/app/outputs/flutter-apk/PesanKeranjang-v1.0.${{ github.run_number }}.apk
         env:
-          # Token rahasia bawaan GitHub untuk otorisasi
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
