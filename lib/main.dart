@@ -21,6 +21,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart'; // File hasil generate dari flutterfire CLI
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -238,6 +241,7 @@ class OrderItem {
   DateTime pickupDate;
   double weightKg;
   bool isPickedUp;
+  String? notes;
 
   OrderItem({
     this.id,
@@ -246,6 +250,7 @@ class OrderItem {
     required this.pickupDate,
     required this.weightKg,
     required this.isPickedUp,
+    this.notes,
   });
 
   double get totalPrice => weightKg * 45000;
@@ -264,6 +269,7 @@ class OrderItem {
       'pickupDate': pickupDate.toIso8601String(),
       'weightKg': weightKg,
       'isPickedUp': isPickedUp,
+      'notes': notes,
     };
   }
 
@@ -275,11 +281,10 @@ class OrderItem {
       pickupDate: DateTime.parse(json['pickupDate']),
       weightKg: (json['weightKg'] as num).toDouble(),
       isPickedUp: json['isPickedUp'] ?? false,
+      notes: json['notes'],
     );
   }
 }
-
-enum SortMode { name, nearestPickup }
 
 class OrderPage extends StatefulWidget {
   final List<OrderItem> initialOrders;
@@ -296,12 +301,12 @@ class _OrderPageState extends State<OrderPage> {
   final int _itemsPerPage = 3; // Menampilkan 3 pembeli per halaman
 
   bool _isScanning = true;
-  SortMode _sortMode = SortMode.name;
 
   StreamSubscription<QuerySnapshot>? _ordersSubscription;
 
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _weightController = TextEditingController();
+  final TextEditingController _notesController = TextEditingController();
 
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -309,7 +314,6 @@ class _OrderPageState extends State<OrderPage> {
   DateTime? _filterStartDate;
   DateTime? _filterEndDate;
 
-  DateTime? _orderDate;
   DateTime? _pickupDate;
 
   final List<OrderItem> _orders = [];
@@ -357,6 +361,7 @@ class _OrderPageState extends State<OrderPage> {
     _ordersSubscription?.cancel();
     _customerController.dispose();
     _weightController.dispose();
+    _notesController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -564,15 +569,11 @@ class _OrderPageState extends State<OrderPage> {
       grouped.putIfAbsent(item.customerName, () => []).add(item);
     }
     for (final entry in grouped.entries) {
-      if (_sortMode == SortMode.nearestPickup) {
-        entry.value.sort((a, b) {
-          if (a.isPickedUp && !b.isPickedUp) return 1;
-          if (!a.isPickedUp && b.isPickedUp) return -1;
-          return a.pickupDate.compareTo(b.pickupDate);
-        });
-      } else {
-        entry.value.sort((a, b) => a.orderDate.compareTo(b.orderDate));
-      }
+      entry.value.sort((a, b) {
+        if (a.isPickedUp && !b.isPickedUp) return 1;
+        if (!a.isPickedUp && b.isPickedUp) return -1;
+        return a.pickupDate.compareTo(b.pickupDate);
+      });
     }
     return grouped;
   }
@@ -759,25 +760,10 @@ class _OrderPageState extends State<OrderPage> {
         _currentPage = 0;
       });
 
-  Future<void> _pickOrderDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _orderDate ?? DateTime.now(),
-      firstDate: DateTime(2024),
-      lastDate: DateTime(2035),
-      helpText: 'Tanggal masuk',
-    );
-    if (picked != null) {
-      setState(() {
-        _orderDate = picked;
-      });
-    }
-  }
-
   Future<void> _pickPickupDate() async {
     final picked = await showDatePicker(
       context: context,
-      initialDate: _pickupDate ?? _orderDate ?? DateTime.now(),
+      initialDate: _pickupDate ?? DateTime.now(),
       firstDate: DateTime(2024),
       lastDate: DateTime(2035),
       helpText: 'Tanggal diambil',
@@ -795,30 +781,32 @@ class _OrderPageState extends State<OrderPage> {
         double.tryParse(_weightController.text.trim().replaceAll(',', '.'));
 
     if (customerName.isEmpty ||
-        _orderDate == null ||
         _pickupDate == null ||
         weightKg == null ||
         weightKg <= 0) {
       _showSnackBar(
-        'Lengkapi nama pembeli, tanggal order, tanggal ambil, dan bobot kue.',
+        'Lengkapi nama pembeli, tanggal ambil, dan bobot kue.',
       );
       return;
     }
 
-    // Validasi: Tanggal Pesan tidak boleh lebih besar dari Tanggal Ambil
-    final orderDateOnly = DateTime(_orderDate!.year, _orderDate!.month, _orderDate!.day);
+    final now = DateTime.now();
+    // Validasi: Tanggal Pengambilan tidak boleh sebelum hari ini
+    final orderDateOnly = DateTime(now.year, now.month, now.day);
     final pickupDateOnly = DateTime(_pickupDate!.year, _pickupDate!.month, _pickupDate!.day);
     if (orderDateOnly.isAfter(pickupDateOnly)) {
-      _showSnackBar('Tanggal pesanan tidak boleh lebih besar dari tanggal pengambilan.');
+      _showSnackBar('Tanggal pengambilan tidak boleh sebelum hari ini.');
       return;
     }
 
+    final notes = _notesController.text.trim();
     final newItem = OrderItem(
       customerName: customerName,
-      orderDate: _orderDate!,
+      orderDate: now,
       pickupDate: _pickupDate!,
       weightKg: weightKg,
       isPickedUp: false,
+      notes: notes.isEmpty ? null : notes,
     );
 
     try {
@@ -849,7 +837,7 @@ class _OrderPageState extends State<OrderPage> {
       setState(() {
         _customerController.clear();
         _weightController.clear();
-        _orderDate = null;
+        _notesController.clear();
         _pickupDate = null;
         _selectedIndex = 2; // Ubah ke 2 agar beralih ke 'Daftar Order' (karena tab 1 sekarang 'Scan QR')
         _currentPage = 0;
@@ -865,6 +853,7 @@ class _OrderPageState extends State<OrderPage> {
     final customerController = TextEditingController(text: item.customerName);
     final weightController =
         TextEditingController(text: item.weightKg.toStringAsFixed(2));
+    final notesController = TextEditingController(text: item.notes);
     DateTime selectedOrderDate = item.orderDate;
     DateTime selectedPickupDate = item.pickupDate;
     bool selectedPickedUp = item.isPickedUp;
@@ -964,6 +953,20 @@ class _OrderPageState extends State<OrderPage> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: notesController,
+                        maxLines: 3,
+                        decoration: InputDecoration(
+                          labelText: 'Catatan (Opsional)',
+                          alignLabelWithHint: true,
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -1006,6 +1009,7 @@ class _OrderPageState extends State<OrderPage> {
                     return;
                   }
 
+                    final updatedNotes = notesController.text.trim();
                     // Update spesifik dokumen di Firestore
                     await FirebaseFirestore.instance
                         .collection('orders')
@@ -1016,6 +1020,7 @@ class _OrderPageState extends State<OrderPage> {
                       'pickupDate': selectedPickupDate.toIso8601String(),
                       'weightKg': updatedWeight,
                       'isPickedUp': selectedPickedUp,
+                      'notes': updatedNotes.isEmpty ? null : updatedNotes,
                     });
 
                     if (mounted) Navigator.pop(context);
@@ -1036,6 +1041,70 @@ class _OrderPageState extends State<OrderPage> {
     await FirebaseFirestore.instance.collection('orders').doc(item.id).delete();
     
     _showSnackBar('Order berhasil dihapus.');
+  }
+
+  void _showOrderDetails(OrderItem item) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.receipt_long, color: Colors.deepOrange),
+              SizedBox(width: 8),
+              Text('Detail Pesanan'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.customerName,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
+                const SizedBox(height: 12),
+                const Divider(height: 1, color: Colors.black12),
+                const SizedBox(height: 12),
+                Text('Tgl Pengambilan: ${_dateFormat.format(item.pickupDate)}', style: const TextStyle(fontSize: 15)),
+                const SizedBox(height: 8),
+                Text('Bobot: ${item.weightKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 15)),
+                const SizedBox(height: 8),
+                Text(
+                  'Total: ${_currencyFormat.format(item.totalPrice)}',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green.shade700),
+                ),
+                if (item.notes != null && item.notes!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text('Catatan:', style: TextStyle(fontSize: 14, color: Colors.black54)),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.orange.shade100),
+                    ),
+                    child: Text(
+                      item.notes!,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Tutup'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showQrCode(OrderItem item) {
@@ -1099,11 +1168,11 @@ class _OrderPageState extends State<OrderPage> {
             ),
             FilledButton.icon(
               onPressed: () {
-                Navigator.pop(context); // Tutup dialog sebelum proses download
-                _downloadQrCode(item, qrData);
+                Navigator.pop(context); // Tutup dialog sebelum proses print
+                _printQrCode(item, qrData);
               },
-              icon: const Icon(Icons.download, size: 18),
-              label: const Text('Download'),
+              icon: const Icon(Icons.print, size: 18),
+              label: const Text('Cetak'),
             ),
           ],
         );
@@ -1111,56 +1180,74 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
-  Future<void> _downloadQrCode(OrderItem item, String qrData) async {
+  Future<void> _printQrCode(OrderItem item, String qrData) async {
     try {
-      // Validasi dan generate QR Code
-      final qrValidationResult = QrValidator.validate(
-        data: qrData,
-        version: QrVersions.auto,
-        errorCorrectionLevel: QrErrorCorrectLevel.L,
+      final doc = pw.Document();
+
+      doc.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.roll80, // Menggunakan format struk kasir 80mm
+          build: (pw.Context context) {
+            return pw.Center(
+              child: pw.Column(
+                mainAxisSize: pw.MainAxisSize.min,
+                children: [
+                  pw.Text(
+                    'Pesan Keranjang',
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
+                  ),
+                  pw.SizedBox(height: 12),
+                  pw.SizedBox(
+                    height: 120,
+                    width: 120,
+                    child: pw.BarcodeWidget(
+                      barcode: pw.Barcode.qrCode(),
+                      data: qrData,
+                    ),
+                  ),
+                  pw.SizedBox(height: 12),
+                  pw.Text(
+                    item.customerName,
+                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                    textAlign: pw.TextAlign.center,
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    'Bobot: ${item.weightKg.toStringAsFixed(1)} kg',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Total: ${_currencyFormat.format(item.totalPrice)}',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Ambil: ${_dateFormat.format(item.pickupDate)}',
+                    style: const pw.TextStyle(fontSize: 12),
+                  ),
+                  if (item.notes != null && item.notes!.isNotEmpty) ...[
+                    pw.SizedBox(height: 8),
+                    pw.Text(
+                      'Catatan: ${item.notes}',
+                      style: const pw.TextStyle(fontSize: 10),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                  ]
+                ],
+              ),
+            );
+          },
+        ),
       );
 
-      if (qrValidationResult.status == QrValidationStatus.valid) {
-        final qrCode = qrValidationResult.qrCode!;
-        final painter = QrPainter.withQr(
-          qr: qrCode,
-          color: const Color(0xFF000000), // Warna QR Hitam
-          emptyColor: const Color(0xFFFFFFFF), // Background Putih
-          gapless: true,
-        );
-
-        // Render QR Code jadi Gambar resolusi tinggi (1024x1024)
-        final picData = await painter.toImageData(1024, format: ui.ImageByteFormat.png);
-        if (picData == null) return;
-
-        final bytes = picData.buffer.asUint8List();
-
-        Directory? directory;
-        if (!kIsWeb && Platform.isAndroid) {
-          directory = await getExternalStorageDirectory();
-        } else if (!kIsWeb && Platform.isIOS) {
-          directory = await getApplicationDocumentsDirectory();
-        }
-
-        if (directory != null) {
-          final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
-          final sanitizedName = item.customerName.replaceAll(RegExp(r'[^a-zA-Z0-9]'), '_');
-          final filePath = '${directory.path}/QR_${sanitizedName}_$timestamp.png';
-          
-          final file = File(filePath);
-          await file.writeAsBytes(bytes, flush: true);
-          
-          _showSnackBar('QR Code berhasil didownload!');
-          
-          // Buka file gambarnya secara otomatis
-          final result = await OpenFilex.open(filePath);
-          if (result.type != ResultType.done) {
-            _showSnackBar('File tersimpan, tapi tidak ada aplikasi untuk membukanya.');
-          }
-        }
-      }
+      // Membuka dialog print bawaan OS
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => doc.save(),
+        name: 'QR_Pesanan_${item.customerName.replaceAll(" ", "_")}',
+      );
     } catch (e) {
-      _showSnackBar('Gagal mendownload QR Code: $e');
+      _showSnackBar('Gagal mencetak QR Code: $e');
     }
   }
 
@@ -1231,6 +1318,7 @@ class _OrderPageState extends State<OrderPage> {
         'weight_kg',
         'is_picked_up',
         'total_price',
+        'notes',
       ];
 
       for (int col = 0; col < headers.length; col++) {
@@ -1301,6 +1389,15 @@ class _OrderPageState extends State<OrderPage> {
               ),
             )
             .value = excel.DoubleCellValue(item.totalPrice);
+            
+        sheet
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 6,
+                rowIndex: dataRow,
+              ),
+            )
+            .value = excel.TextCellValue(item.notes ?? '');
       }
 
       final encoded = workbook.encode();
@@ -1349,6 +1446,7 @@ class _OrderPageState extends State<OrderPage> {
     final pickupDateIndex = header.indexOf('pickup_date');
     final weightIndex = header.indexOf('weight_kg');
     final pickedIndex = header.indexOf('is_picked_up');
+    final notesIndex = header.indexOf('notes');
 
     if (customerIndex == -1 ||
         orderDateIndex == -1 ||
@@ -1368,6 +1466,7 @@ class _OrderPageState extends State<OrderPage> {
       final pickupDate = _parseFlexibleDate(_readCell(row, pickupDateIndex));
       final weightKg = _parseFlexibleDouble(_readCell(row, weightIndex));
       final isPickedUp = _parseBool(_readCell(row, pickedIndex));
+      final notesStr = notesIndex != -1 ? _readCell(row, notesIndex).trim() : '';
 
       if (customerName.isNotEmpty &&
           orderDate != null &&
@@ -1380,6 +1479,7 @@ class _OrderPageState extends State<OrderPage> {
             pickupDate: pickupDate,
             weightKg: weightKg,
             isPickedUp: isPickedUp,
+            notes: notesStr.isEmpty ? null : notesStr,
           ),
         );
       }
@@ -1440,7 +1540,7 @@ class _OrderPageState extends State<OrderPage> {
 
   Widget _buildInputTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 550),
@@ -1456,7 +1556,7 @@ class _OrderPageState extends State<OrderPage> {
                 ),
               ],
             ),
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(24),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1489,7 +1589,7 @@ class _OrderPageState extends State<OrderPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
@@ -1508,7 +1608,7 @@ class _OrderPageState extends State<OrderPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
                   TextField(
                     controller: _customerController,
                     decoration: InputDecoration(
@@ -1522,55 +1622,27 @@ class _OrderPageState extends State<OrderPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: _pickOrderDate,
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: _pickPickupDate,
+                    borderRadius: BorderRadius.circular(16),
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Tgl Pengambilan',
+                        prefixIcon: const Icon(Icons.event_available),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                        enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(16),
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Tgl Order Masuk',
-                              prefixIcon: const Icon(Icons.edit_calendar),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: Colors.grey.shade300),
-                              ),
-                            ),
-                            child: Text(
-                              _formatDateOrPlaceholder(_orderDate, 'Pilih tanggal'),
-                              style: TextStyle(color: _orderDate == null ? Colors.black54 : Colors.black87),
-                            ),
-                          ),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: InkWell(
-                          onTap: _pickPickupDate,
-                          borderRadius: BorderRadius.circular(16),
-                          child: InputDecorator(
-                            decoration: InputDecoration(
-                              labelText: 'Tgl Pengambilan',
-                              prefixIcon: const Icon(Icons.event_available),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(16),
-                                borderSide: BorderSide(color: Colors.grey.shade300),
-                              ),
-                            ),
-                            child: Text(
-                              _formatDateOrPlaceholder(_pickupDate, 'Pilih tanggal'),
-                              style: TextStyle(color: _pickupDate == null ? Colors.black54 : Colors.black87),
-                            ),
-                          ),
-                        ),
+                      child: Text(
+                        _formatDateOrPlaceholder(_pickupDate, 'Pilih tanggal'),
+                        style: TextStyle(color: _pickupDate == null ? Colors.black54 : Colors.black87),
                       ),
-                    ],
+                    ),
                   ),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _weightController,
                     keyboardType: const TextInputType.numberWithOptions(
@@ -1587,10 +1659,29 @@ class _OrderPageState extends State<OrderPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: _notesController,
+                    maxLines: 2,
+                    decoration: InputDecoration(
+                      labelText: 'Catatan (Opsional)',
+                      hintText: 'Contoh: Kemasan dipisah, boks warna merah, dll.',
+                      alignLabelWithHint: true,
+                      prefixIcon: const Padding(
+                        padding: EdgeInsets.only(bottom: 24),
+                        child: Icon(Icons.notes),
+                      ),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
-                    height: 56,
+                    height: 52,
                     child: FilledButton.icon(
                       style: FilledButton.styleFrom(
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1857,17 +1948,13 @@ class _OrderPageState extends State<OrderPage> {
 
     final groupedEntries = _groupedOrders.entries.toList();
 
-    if (_sortMode == SortMode.nearestPickup) {
-      groupedEntries.sort((a, b) {
-        final allPickedUpA = a.value.every((i) => i.isPickedUp);
-        final allPickedUpB = b.value.every((i) => i.isPickedUp);
-        if (allPickedUpA && !allPickedUpB) return 1;
-        if (!allPickedUpA && allPickedUpB) return -1;
-        return a.value.first.pickupDate.compareTo(b.value.first.pickupDate);
-      });
-    } else {
-      groupedEntries.sort((a, b) => a.key.compareTo(b.key));
-    }
+    groupedEntries.sort((a, b) {
+      final allPickedUpA = a.value.every((i) => i.isPickedUp);
+      final allPickedUpB = b.value.every((i) => i.isPickedUp);
+      if (allPickedUpA && !allPickedUpB) return 1;
+      if (!allPickedUpA && allPickedUpB) return -1;
+      return a.value.first.pickupDate.compareTo(b.value.first.pickupDate);
+    });
 
     final totalPages = (groupedEntries.length / _itemsPerPage).ceil();
 
@@ -2017,42 +2104,9 @@ class _OrderPageState extends State<OrderPage> {
                 fullWidth: true,
               ),
               const SizedBox(height: 40),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Daftar Pesanan',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
-                  ),
-                  Container(
-                    height: 48,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<SortMode>(
-                        value: _sortMode,
-                        icon: const Icon(Icons.sort, color: Colors.deepOrange),
-                        style: TextStyle(fontSize: 14, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
-                        items: const [
-                          DropdownMenuItem(value: SortMode.name, child: Text('Urut Abjad')),
-                          DropdownMenuItem(value: SortMode.nearestPickup, child: Text('Ambil Terdekat')),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _sortMode = val;
-                              _currentPage = 0;
-                            });
-                          }
-                        },
-                      ),
-                    ),
-                  ),
-                ],
+              const Text(
+                'Daftar Pesanan',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -2106,31 +2160,31 @@ class _OrderPageState extends State<OrderPage> {
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: allPickedUp ? Colors.green.shade50 : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: allPickedUp ? Colors.green.shade400 : Colors.grey.shade300,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: allPickedUp ? Colors.green.shade50 : Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: allPickedUp ? Colors.green.shade400 : Colors.grey.shade300,
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Text(
-                              customerName,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  customerName,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: allPickedUp ? Colors.green.shade100 : Colors.red.shade50,
                               borderRadius: BorderRadius.circular(8),
@@ -2171,73 +2225,96 @@ class _OrderPageState extends State<OrderPage> {
                                 padding: EdgeInsets.symmetric(vertical: 12),
                                 child: Divider(height: 1, color: Colors.black12),
                               ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Pesan: ${_dateFormat.format(item.orderDate)}',
-                                  style: const TextStyle(fontSize: 12, color: Colors.black54),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: isPickedUp ? Colors.green.shade100 : Colors.deepOrange.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.event_available,
-                                        size: 16,
-                                        color: isPickedUp ? Colors.green.shade700 : Colors.deepOrange.shade700,
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        'Ambil: ${_dateFormat.format(item.pickupDate)}',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
-                                          color: isPickedUp ? Colors.green.shade800 : Colors.deepOrange.shade800,
+                              Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => _showOrderDetails(item),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                                    child: Column(
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Pesan: ${_dateFormat.format(item.orderDate)}',
+                                              style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                            ),
+                                            Row(
+                                              children: [
+                                                if (item.notes != null && item.notes!.isNotEmpty)
+                                                  Padding(
+                                                    padding: const EdgeInsets.only(right: 8.0),
+                                                    child: Icon(Icons.notes, size: 18, color: Colors.deepOrange.shade300),
+                                                  ),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                  decoration: BoxDecoration(
+                                                    color: isPickedUp ? Colors.green.shade100 : Colors.deepOrange.shade50,
+                                                    borderRadius: BorderRadius.circular(8),
+                                                  ),
+                                                  child: Row(
+                                                    children: [
+                                                      Icon(
+                                                        Icons.event_available,
+                                                        size: 16,
+                                                        color: isPickedUp ? Colors.green.shade700 : Colors.deepOrange.shade700,
+                                                      ),
+                                                      const SizedBox(width: 6),
+                                                      Text(
+                                                        'Ambil: ${_dateFormat.format(item.pickupDate)}',
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          fontWeight: FontWeight.w800,
+                                                          color: isPickedUp ? Colors.green.shade800 : Colors.deepOrange.shade800,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 16),
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          crossAxisAlignment: CrossAxisAlignment.end,
+                                          children: [
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                const Text('Bobot Pesanan', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  '${item.weightKg.toStringAsFixed(2)} kg',
+                                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                                                ),
+                                              ],
+                                            ),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.end,
+                                              children: [
+                                                const Text('Total Harga', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  _currencyFormat.format(item.totalPrice),
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.w900,
+                                                    color: Colors.green.shade700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text('Bobot Pesanan', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      '${item.weightKg.toStringAsFixed(2)} kg',
-                                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                    ),
-                                  ],
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    const Text('Total Harga', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _currencyFormat.format(item.totalPrice),
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w900,
-                                        color: Colors.green.shade700,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                              ),
                             const Padding(
                               padding: EdgeInsets.symmetric(vertical: 12),
                               child: Divider(height: 1, color: Colors.black12),
@@ -2287,7 +2364,7 @@ class _OrderPageState extends State<OrderPage> {
                                 ),
                                 const SizedBox(width: 8),
                                 IconButton(
-                                  icon: const Icon(Icons.qr_code_2, color: Colors.deepPurple),
+                                  icon: const Icon(Icons.qr_code_2, color: Colors.black),
                                   onPressed: () => _showQrCode(item),
                                   tooltip: 'Tampilkan QR Code',
                                 ),
@@ -2639,20 +2716,34 @@ class ReminderPage extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.notifications_off_outlined,
-                        size: 80, color: Colors.grey.shade400),
-                    const SizedBox(height: 20),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.04),
+                            blurRadius: 16,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Icon(Icons.notifications_active_outlined,
+                          size: 64, color: Colors.grey.shade400),
+                    ),
+                    const SizedBox(height: 24),
                     Text(
-                      'Tidak Ada Pengingat',
+                      'Belum Ada Pengingat',
                       style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
-                          color: Colors.grey.shade700),
+                          color: Colors.black87),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Text(
                       'Tidak ada jadwal pengambilan pesanan untuk hari ini atau besok.',
-                      style: TextStyle(fontSize: 16, color: Colors.grey.shade500),
+                      style: TextStyle(fontSize: 15, color: Colors.grey.shade500, height: 1.4),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -2667,80 +2758,103 @@ class ReminderPage extends StatelessWidget {
                 final isToday = DateTime(o.pickupDate.year, o.pickupDate.month,
                         o.pickupDate.day)
                     .isAtSameMomentAs(today);
-                return Card(
+                return Container(
                   margin: const EdgeInsets.only(bottom: 16),
-                  elevation: 2,
-                  shadowColor: (isToday ? Colors.red : Colors.orange).withOpacity(0.2),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(
-                      color: isToday
-                          ? Colors.red.shade200
-                          : Colors.orange.shade200,
-                      width: 1,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.04),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: isToday ? Colors.red.shade100 : Colors.orange.shade100,
+                      width: 1.5,
                     ),
                   ),
-                  clipBehavior: Clip.antiAlias,
+                  padding: const EdgeInsets.all(20),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        color: isToday
-                            ? Colors.red.shade50
-                            : Colors.orange.shade50,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        child: Row(
-                          children: [
-                            Icon(
-                              isToday
-                                  ? Icons.warning_amber_rounded
-                                  : Icons.schedule,
-                              color: isToday
-                                  ? Colors.red.shade700
-                                  : Colors.orange.shade700,
-                              size: 24,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isToday ? Colors.red.shade50 : Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                            const SizedBox(width: 12),
-                            Text(
-                              isToday ? 'Ambil HARI INI' : 'Ambil BESOK',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                color: isToday
-                                    ? Colors.red.shade800
-                                    : Colors.orange.shade800,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isToday ? Icons.warning_rounded : Icons.schedule_rounded,
+                                  color: isToday ? Colors.red.shade600 : Colors.orange.shade600,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  isToday ? 'Hari Ini' : 'Besok',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                    color: isToday ? Colors.red.shade700 : Colors.orange.shade700,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
+                          Text(
+                            dateFormat.format(o.pickupDate),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        o.customerName,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black87,
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
                           children: [
+                            Icon(Icons.scale_rounded, color: Colors.grey.shade500, size: 20),
+                            const SizedBox(width: 8),
                             Text(
-                              o.customerName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 20,
-                                color: Colors.black87,
+                              'Bobot Pesanan',
+                              style: TextStyle(
+                                color: Colors.grey.shade700,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            _buildInfoRow(
-                              context: context,
-                              icon: Icons.scale_outlined,
-                              label: 'Bobot Pesanan',
-                              value: '${o.weightKg.toStringAsFixed(1)} kg',
-                            ),
-                            const SizedBox(height: 12),
-                            _buildInfoRow(
-                              context: context,
-                              icon: Icons.calendar_today_outlined,
-                              label: 'Tanggal Ambil',
-                              value: dateFormat.format(o.pickupDate),
+                            const Spacer(),
+                            Text(
+                              '${o.weightKg.toStringAsFixed(1)} kg',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.black87,
+                              ),
                             ),
                           ],
                         ),
@@ -2750,30 +2864,6 @@ class ReminderPage extends StatelessWidget {
                 );
               },
             ),
-    );
-  }
-
-  Widget _buildInfoRow(
-      {required BuildContext context,
-      required IconData icon,
-      required String label,
-      required String value}) {
-    return Row(
-      children: [
-        Icon(icon, color: Colors.grey.shade600, size: 20),
-        const SizedBox(width: 12),
-        Text(label,
-            style: TextStyle(
-                color: Colors.black54,
-                fontSize: 15,
-                fontWeight: FontWeight.w500)),
-        const Spacer(),
-        Text(
-          value,
-          style: const TextStyle(
-              fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
-        ),
-      ],
     );
   }
 }
