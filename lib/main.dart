@@ -32,7 +32,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint("Handling a background message: ${message.messageId}");
 }
 
-final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final GlobalKey<ScaffoldMessengerState> rootScaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -67,12 +68,15 @@ class KueCinaApp extends StatelessWidget {
         ),
         datePickerTheme: DatePickerThemeData(
           backgroundColor: Colors.white,
-          surfaceTintColor: Colors.transparent, // Menghilangkan tint warna bawaan Material 3 agar putih bersih
+          surfaceTintColor: Colors
+              .transparent, // Menghilangkan tint warna bawaan Material 3 agar putih bersih
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24), // Lengkungan yang lebih modern
+            borderRadius:
+                BorderRadius.circular(24), // Lengkungan yang lebih modern
           ),
           headerBackgroundColor: Colors.white, // Header kalender putih
-          headerForegroundColor: Colors.black87, // Teks judul pada header menjadi gelap
+          headerForegroundColor:
+              Colors.black87, // Teks judul pada header menjadi gelap
         ),
         dialogTheme: DialogThemeData(
           backgroundColor: Colors.white,
@@ -176,14 +180,19 @@ class _SplashScreenState extends State<SplashScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('🔔 ${message.notification!.title}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  Text('🔔 ${message.notification!.title}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 6),
-                  Text(message.notification!.body ?? '', maxLines: 10, overflow: TextOverflow.ellipsis),
+                  Text(message.notification!.body ?? '',
+                      maxLines: 10, overflow: TextOverflow.ellipsis),
                 ],
               ),
               backgroundColor: Colors.deepOrange,
-              duration: const Duration(seconds: 5), // Diperlama agar penjual sempat membaca list
-              behavior: SnackBarBehavior.floating, // Dibuat melayang agar ukurannya menyesuaikan isi
+              duration: const Duration(
+                  seconds: 5), // Diperlama agar penjual sempat membaca list
+              behavior: SnackBarBehavior
+                  .floating, // Dibuat melayang agar ukurannya menyesuaikan isi
             ),
           );
         }
@@ -234,7 +243,8 @@ class _SplashScreenState extends State<SplashScreen> {
               alignment: Alignment.bottomCenter,
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 64.0),
-                child: Text(_appVersion, style: TextStyle(color: Colors.grey.shade600)),
+                child: Text(_appVersion,
+                    style: TextStyle(color: Colors.grey.shade600)),
               ),
             ),
           ],
@@ -277,6 +287,27 @@ class OrderItem {
 
   double get totalPrice => explicitTotalPrice ?? (weightKg * 45000);
 
+  // Menghitung bobot aktual dalam kg berdasarkan detail item
+  double get actualWeightKg {
+    if (hasItems && items != null) {
+      double total = 0.0;
+      items!.forEach((key, value) {
+        final qty = (value as num).toDouble();
+        if (key == 'susunan_3') {
+          total += qty * 3;
+        } else if (key == 'susunan_5') {
+          total += qty * 5;
+        } else if (key == 'susunan_7') {
+          total += qty * 7;
+        } else {
+          total += qty; // Untuk kue cina dan dodol, nilai = kg
+        }
+      });
+      return total;
+    }
+    return weightKg; // Fallback ke default weightKg jika tidak pakai fitur item detail
+  }
+
   static String toIsoDate(DateTime date) {
     final y = date.year.toString().padLeft(4, '0');
     final m = date.month.toString().padLeft(2, '0');
@@ -304,16 +335,15 @@ class OrderItem {
     double parsedWeight = 0.0;
     String parsedNotes = json['notes'] ?? '';
     bool hasItems = false;
+    Map<String, dynamic>? parsedItems;
 
     // Mengambil data 'items' jika pesanan berasal dari aplikasi pembeli (Client)
     if (json['items'] != null && json['items'] is Map) {
       final itemsMap = json['items'] as Map<String, dynamic>;
       hasItems = true; // Tandai bahwa ini pesanan gaya baru
-      
-      itemsMap.forEach((key, value) {
-        double qty = (value as num).toDouble();
-        parsedWeight += qty; // Menjumlahkan bobot/jumlah dari setiap item
-      });
+      parsedItems = itemsMap; // Simpan map items untuk konversi actualWeightKg
+
+      parsedWeight = itemsMap.length.toDouble(); // Menghitung jumlah jenis item
     } else {
       parsedWeight = (json['weightKg'] as num?)?.toDouble() ?? 0.0;
     }
@@ -331,6 +361,7 @@ class OrderItem {
       fcmToken: json['fcmToken'],
       explicitTotalPrice: (json['totalPrice'] as num?)?.toDouble(),
       hasItems: hasItems,
+      items: parsedItems,
     );
   }
 }
@@ -355,7 +386,6 @@ class _OrderPageState extends State<OrderPage> {
 
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _notesController = TextEditingController();
 
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -369,9 +399,9 @@ class _OrderPageState extends State<OrderPage> {
 
   final List<Map<String, dynamic>> _menuItems = [
     {'id': 'kue_cina', 'name': 'Kue Cina', 'price': 45000, 'unit': 'kg'},
-    {'id': 'susunan_3', 'name': 'Susunan 3', 'price': 60000, 'unit': 'box'},
-    {'id': 'susunan_5', 'name': 'Susunan 5', 'price': 70000, 'unit': 'box'},
-    {'id': 'susunan_7', 'name': 'Susunan 7', 'price': 80000, 'unit': 'box'},
+    {'id': 'susunan_3', 'name': 'Susunan 3', 'price': 60000, 'unit': 'set'},
+    {'id': 'susunan_5', 'name': 'Susunan 5', 'price': 70000, 'unit': 'set'},
+    {'id': 'susunan_7', 'name': 'Susunan 7', 'price': 80000, 'unit': 'set'},
     {'id': 'dodol_lapis', 'name': 'Dodol Lapis', 'price': 75000, 'unit': 'kg'},
     {'id': 'dodol_biasa', 'name': 'Dodol Biasa', 'price': 65000, 'unit': 'kg'},
     {'id': 'dodol_duren', 'name': 'Dodol Duren', 'price': 75000, 'unit': 'kg'},
@@ -379,9 +409,8 @@ class _OrderPageState extends State<OrderPage> {
 
   final Map<String, int> _cart = {};
 
-  int get _totalCartItems => _cart.values.fold(0, (sum, qty) => sum + qty);
-
-  double get _totalCartPrice => _menuItems.fold(0.0, (sum, item) => sum + ((_cart[item['id']] ?? 0) * (item['price'] as int)));
+  double get _totalCartPrice => _menuItems.fold(0.0,
+      (sum, item) => sum + ((_cart[item['id']] ?? 0) * (item['price'] as int)));
 
   void _updateCart(String id, int delta) {
     setState(() {
@@ -400,17 +429,21 @@ class _OrderPageState extends State<OrderPage> {
     // Urutkan pesanan dari yang terbaru agar mendapat data nama terupdate
     final sortedOrders = List<OrderItem>.from(_orders)
       ..sort((a, b) => b.orderDate.compareTo(a.orderDate));
-      
+
     for (var order in sortedOrders) {
-      if (order.customerPhone != null && order.customerPhone!.trim().isNotEmpty) {
+      if (order.customerPhone != null &&
+          order.customerPhone!.trim().isNotEmpty) {
         // Gunakan nomor WA sebagai kunci agar tidak ada data ganda
         if (!customers.containsKey(order.customerPhone!)) {
           customers[order.customerPhone!] = order.customerName;
         }
       }
     }
-    return customers.entries.map((e) => {'phone': e.key, 'name': e.value}).toList()
-      ..sort((a, b) => a['name']!.toLowerCase().compareTo(b['name']!.toLowerCase()));
+    return customers.entries
+        .map((e) => {'phone': e.key, 'name': e.value})
+        .toList()
+      ..sort((a, b) =>
+          a['name']!.toLowerCase().compareTo(b['name']!.toLowerCase()));
   }
 
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy', 'id_ID');
@@ -456,7 +489,6 @@ class _OrderPageState extends State<OrderPage> {
     _ordersSubscription?.cancel();
     _customerController.dispose();
     _phoneController.dispose();
-    _notesController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -466,7 +498,9 @@ class _OrderPageState extends State<OrderPage> {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    if (upcomingOrders.isEmpty) return; // Jika tidak ada order hari ini/besok, lewati
+    if (upcomingOrders.isEmpty) {
+      return; // Jika tidak ada order hari ini/besok, lewati
+    }
 
     // Memutar suara notifikasi bawaan (alert/beep)
     SystemSound.play(SystemSoundType.alert);
@@ -494,7 +528,8 @@ class _OrderPageState extends State<OrderPage> {
                     color: Colors.orange, size: 28),
                 SizedBox(width: 16),
                 Text('Pengingat Pesanan!',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                    style:
+                        TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -548,10 +583,7 @@ class _OrderPageState extends State<OrderPage> {
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16)),
                                 const SizedBox(height: 4),
-                                Text(
-                                    isToday
-                                        ? 'Ambil Hari ini'
-                                        : 'Ambil Besok',
+                                Text(isToday ? 'Ambil Hari ini' : 'Ambil Besok',
                                     style: TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: isToday
@@ -561,7 +593,10 @@ class _OrderPageState extends State<OrderPage> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                            Text(o.hasItems ? '${o.weightKg.toInt()} item' : '${o.weightKg.toStringAsFixed(1)} kg',
+                          Text(
+                              o.hasItems
+                                  ? '${o.weightKg.toInt()} item'
+                                  : '${o.weightKg.toStringAsFixed(1)} kg',
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 16)),
                         ],
@@ -616,7 +651,9 @@ class _OrderPageState extends State<OrderPage> {
     return _orders.where((order) {
       // Filter pencarian berdasarkan nama pembeli (mengabaikan huruf besar/kecil)
       if (_searchQuery.isNotEmpty) {
-        if (!order.customerName.toLowerCase().contains(_searchQuery.toLowerCase())) {
+        if (!order.customerName
+            .toLowerCase()
+            .contains(_searchQuery.toLowerCase())) {
           return false;
         }
       }
@@ -674,11 +711,11 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   double get _totalOrderedWeight =>
-      _filteredOrders.fold(0.0, (sum, item) => sum + item.weightKg);
+      _filteredOrders.fold(0.0, (sum, item) => sum + item.actualWeightKg);
 
   double get _remainingWeight => _filteredOrders
       .where((item) => !item.isPickedUp)
-      .fold(0.0, (sum, item) => sum + item.weightKg);
+      .fold(0.0, (sum, item) => sum + item.actualWeightKg);
 
   double get _totalRevenue =>
       _filteredOrders.fold(0.0, (sum, item) => sum + item.totalPrice);
@@ -687,11 +724,11 @@ class _OrderPageState extends State<OrderPage> {
   int get _totalCustomerCount => _groupedOrders.length;
 
   double _getTotalWeightPerCustomer(List<OrderItem> items) =>
-      items.fold(0.0, (sum, item) => sum + item.weightKg);
+      items.fold(0.0, (sum, item) => sum + item.actualWeightKg);
 
   double _getRemainingWeightPerCustomer(List<OrderItem> items) => items
       .where((item) => !item.isPickedUp)
-      .fold(0.0, (sum, item) => sum + item.weightKg);
+      .fold(0.0, (sum, item) => sum + item.actualWeightKg);
 
   double _getTotalPricePerCustomer(List<OrderItem> items) =>
       items.fold(0.0, (sum, item) => sum + item.totalPrice);
@@ -753,11 +790,14 @@ class _OrderPageState extends State<OrderPage> {
                             child: InputDecorator(
                               decoration: InputDecoration(
                                 labelText: 'Dari',
-                                prefixIcon: const Icon(Icons.date_range_outlined),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                                prefixIcon:
+                                    const Icon(Icons.date_range_outlined),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16)),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide:
+                                      BorderSide(color: Colors.grey.shade300),
                                 ),
                               ),
                               child: Text(_dateFormat.format(tempStart)),
@@ -773,10 +813,12 @@ class _OrderPageState extends State<OrderPage> {
                               decoration: InputDecoration(
                                 labelText: 'Sampai',
                                 prefixIcon: const Icon(Icons.event_outlined),
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16)),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(color: Colors.grey.shade300),
+                                  borderSide:
+                                      BorderSide(color: Colors.grey.shade300),
                                 ),
                               ),
                               child: Text(_dateFormat.format(tempEnd)),
@@ -874,7 +916,10 @@ class _OrderPageState extends State<OrderPage> {
     final customerName = _normalizeCustomerName(_customerController.text);
     final customerPhone = _phoneController.text.trim();
 
-    if (customerName.isEmpty || customerPhone.isEmpty || _pickupDate == null || _cart.isEmpty) {
+    if (customerName.isEmpty ||
+        customerPhone.isEmpty ||
+        _pickupDate == null ||
+        _cart.isEmpty) {
       _showSnackBar('Lengkapi nama pembeli, No. WA, tanggal ambil, dan item.');
       return;
     }
@@ -882,7 +927,8 @@ class _OrderPageState extends State<OrderPage> {
     final now = DateTime.now();
     // Validasi: Tanggal Pengambilan tidak boleh sebelum hari ini
     final orderDateOnly = DateTime(now.year, now.month, now.day);
-    final pickupDateOnly = DateTime(_pickupDate!.year, _pickupDate!.month, _pickupDate!.day);
+    final pickupDateOnly =
+        DateTime(_pickupDate!.year, _pickupDate!.month, _pickupDate!.day);
     if (orderDateOnly.isAfter(pickupDateOnly)) {
       _showSnackBar('Tanggal pengambilan tidak boleh sebelum hari ini.');
       return;
@@ -890,39 +936,46 @@ class _OrderPageState extends State<OrderPage> {
 
     final random = Random();
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final randomString = List.generate(8, (index) => chars[random.nextInt(chars.length)]).join();
+    final randomString =
+        List.generate(8, (index) => chars[random.nextInt(chars.length)]).join();
     final noResi = 'RS-$randomString';
 
     final List<String> summaryList = [];
     final List<String> notifItems = [];
     for (var entry in _cart.entries) {
       final item = _menuItems.firstWhere((m) => m['id'] == entry.key);
-      final prefix = item['unit'] == 'kg' ? '${entry.value}kg' : '${entry.value}x';
+      final prefix =
+          item['unit'] == 'kg' ? '${entry.value}kg' : '${entry.value}x';
       summaryList.add('- $prefix ${item['name']}');
       notifItems.add('$prefix ${item['name']}');
     }
     final String cartSummary = summaryList.join('\n');
     final String itemsSummary = notifItems.join(' & ');
-    final String manualNotes = _notesController.text.trim();
-    final String finalNotes = manualNotes.isEmpty ? cartSummary : '$cartSummary\n\nCatatan Tambahan:\n$manualNotes';
+    final String finalNotes = cartSummary;
 
     // Cari fcmToken dari riwayat pesanan pelanggan ini jika ada (berdasarkan No. WA)
     String? fcmToken;
     // Bersihkan format nomor HP dari spasi/strip agar pencocokan 100% akurat
     final cleanPhone = customerPhone.replaceAll(RegExp(r'\D'), '');
-    
+
     final previousOrders = _orders.where((o) {
-      if (o.customerPhone == null || o.fcmToken == null || o.fcmToken!.trim().isEmpty) return false;
+      if (o.customerPhone == null ||
+          o.fcmToken == null ||
+          o.fcmToken!.trim().isEmpty) {
+        return false;
+      }
       final cleanOPhone = o.customerPhone!.replaceAll(RegExp(r'\D'), '');
       return cleanOPhone == cleanPhone;
     }).toList();
 
     if (previousOrders.isNotEmpty) {
       previousOrders.sort((a, b) => b.orderDate.compareTo(a.orderDate));
-      fcmToken = previousOrders.first.fcmToken; // Ambil token dari pesanan paling terbaru
+      fcmToken = previousOrders
+          .first.fcmToken; // Ambil token dari pesanan paling terbaru
       debugPrint('✅ FCM Token berhasil disalin: $fcmToken');
     } else {
-      debugPrint('⚠️ FCM Token tidak ditemukan untuk histori No. WA: $cleanPhone');
+      debugPrint(
+          '⚠️ FCM Token tidak ditemukan untuk histori No. WA: $cleanPhone');
     }
 
     final newItem = OrderItem(
@@ -930,7 +983,7 @@ class _OrderPageState extends State<OrderPage> {
       customerPhone: cleanPhone,
       orderDate: now,
       pickupDate: _pickupDate!,
-      weightKg: _totalCartItems.toDouble(),
+      weightKg: _cart.length.toDouble(),
       isPickedUp: false,
       notes: finalNotes,
       resi: noResi,
@@ -946,8 +999,20 @@ class _OrderPageState extends State<OrderPage> {
           .collection('orders')
           .doc(noResi)
           .set(newItem.toJson());
-      
+
       newItem.id = noResi; // Assign ID ke model lokal
+
+      // Daftarkan/Update data user ke collection 'users' agar bisa dipakai login di aplikasi client
+      if (cleanPhone.isNotEmpty) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(cleanPhone)
+            .set({
+          'name': customerName,
+          'phone': cleanPhone,
+          // Gunakan merge: true agar tidak menimpa data lain (seperti alamat/token) jika user sudah ada
+        }, SetOptions(merge: true));
+      }
 
       // Panggil API Vercel untuk Broadcast Notifikasi ke Semua Admin
       try {
@@ -956,7 +1021,8 @@ class _OrderPageState extends State<OrderPage> {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'customerName': newItem.customerName,
-            'weightKg': newItem.weightKg.toInt(),
+            'weightKg': newItem.actualWeightKg
+                .toInt(), // Supaya admin dapat push notif bobot yang benar
             'itemsSummary': itemsSummary,
           }),
         );
@@ -970,10 +1036,10 @@ class _OrderPageState extends State<OrderPage> {
       setState(() {
         _customerController.clear();
         _phoneController.clear();
-        _notesController.clear();
         _pickupDate = null;
         _cart.clear();
-        _selectedIndex = 2; // Ubah ke 2 agar beralih ke 'Daftar Order' (karena tab 1 sekarang 'Scan QR')
+        _selectedIndex =
+            2; // Ubah ke 2 agar beralih ke 'Daftar Order' (karena tab 1 sekarang 'Scan QR')
         _currentPage = 0;
       });
 
@@ -985,7 +1051,8 @@ class _OrderPageState extends State<OrderPage> {
 
   Future<void> _editOrder(OrderItem item) async {
     final customerController = TextEditingController(text: item.customerName);
-    final phoneController = TextEditingController(text: item.customerPhone ?? '');
+    final phoneController =
+        TextEditingController(text: item.customerPhone ?? '');
     final weightController =
         TextEditingController(text: item.weightKg.toStringAsFixed(2));
     final notesController = TextEditingController(text: item.notes);
@@ -1011,7 +1078,8 @@ class _OrderPageState extends State<OrderPage> {
                         decoration: InputDecoration(
                           labelText: 'Nama Pembeli',
                           prefixIcon: const Icon(Icons.person_outline),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16)),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -1025,7 +1093,8 @@ class _OrderPageState extends State<OrderPage> {
                         decoration: InputDecoration(
                           labelText: 'Nomor WhatsApp',
                           prefixIcon: const Icon(Icons.phone_outlined),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16)),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -1050,10 +1119,12 @@ class _OrderPageState extends State<OrderPage> {
                           decoration: InputDecoration(
                             labelText: 'Tgl Order Masuk',
                             prefixIcon: const Icon(Icons.edit_calendar),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16)),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: Colors.grey.shade300),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
                             ),
                           ),
                           child: Text(_dateFormat.format(selectedOrderDate)),
@@ -1077,10 +1148,12 @@ class _OrderPageState extends State<OrderPage> {
                           decoration: InputDecoration(
                             labelText: 'Tgl Pengambilan',
                             prefixIcon: const Icon(Icons.event_available),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(16)),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: Colors.grey.shade300),
+                              borderSide:
+                                  BorderSide(color: Colors.grey.shade300),
                             ),
                           ),
                           child: Text(_dateFormat.format(selectedPickupDate)),
@@ -1093,23 +1166,11 @@ class _OrderPageState extends State<OrderPage> {
                           decimal: true,
                         ),
                         decoration: InputDecoration(
-                        labelText: item.hasItems ? 'Jumlah Item' : 'Bobot Kue (kg)',
+                          labelText:
+                              item.hasItems ? 'Jumlah Item' : 'Bobot Kue (kg)',
                           prefixIcon: const Icon(Icons.scale_outlined),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: notesController,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          labelText: 'Catatan (Opsional)',
-                          alignLabelWithHint: true,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16)),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -1117,6 +1178,7 @@ class _OrderPageState extends State<OrderPage> {
                         ),
                       ),
                       const SizedBox(height: 12),
+                      const SizedBox(height: 16),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         value: selectedPickedUp,
@@ -1138,7 +1200,8 @@ class _OrderPageState extends State<OrderPage> {
                   onPressed: () async {
                     final updatedName =
                         _normalizeCustomerName(customerController.text);
-                    final updatedPhone = phoneController.text.replaceAll(RegExp(r'\D'), '');
+                    final updatedPhone =
+                        phoneController.text.replaceAll(RegExp(r'\D'), '');
                     final updatedWeight = double.tryParse(
                       weightController.text.trim().replaceAll(',', '.'),
                     );
@@ -1151,13 +1214,16 @@ class _OrderPageState extends State<OrderPage> {
                       return;
                     }
 
-                  // Validasi: Tanggal Pesan tidak boleh lebih besar dari Tanggal Ambil (saat diedit)
-                  final editOrderOnly = DateTime(selectedOrderDate.year, selectedOrderDate.month, selectedOrderDate.day);
-                  final editPickupOnly = DateTime(selectedPickupDate.year, selectedPickupDate.month, selectedPickupDate.day);
-                  if (editOrderOnly.isAfter(editPickupOnly)) {
-                    _showSnackBar('Tanggal pesanan tidak boleh lebih besar dari tanggal pengambilan.');
-                    return;
-                  }
+                    // Validasi: Tanggal Pesan tidak boleh lebih besar dari Tanggal Ambil (saat diedit)
+                    final editOrderOnly = DateTime(selectedOrderDate.year,
+                        selectedOrderDate.month, selectedOrderDate.day);
+                    final editPickupOnly = DateTime(selectedPickupDate.year,
+                        selectedPickupDate.month, selectedPickupDate.day);
+                    if (editOrderOnly.isAfter(editPickupOnly)) {
+                      _showSnackBar(
+                          'Tanggal pesanan tidak boleh lebih besar dari tanggal pengambilan.');
+                      return;
+                    }
 
                     final updatedNotes = notesController.text.trim();
                     // Update spesifik dokumen di Firestore
@@ -1166,7 +1232,8 @@ class _OrderPageState extends State<OrderPage> {
                         .doc(item.id)
                         .update({
                       'customerName': updatedName,
-                      'customerPhone': updatedPhone.isEmpty ? null : updatedPhone,
+                      'customerPhone':
+                          updatedPhone.isEmpty ? null : updatedPhone,
                       'orderDate': selectedOrderDate.toIso8601String(),
                       'pickupDate': selectedPickupDate.toIso8601String(),
                       'weightKg': updatedWeight,
@@ -1190,7 +1257,7 @@ class _OrderPageState extends State<OrderPage> {
   Future<void> _deleteOrder(OrderItem item) async {
     // Hapus dari Firestore berdasarkan ID-nya
     await FirebaseFirestore.instance.collection('orders').doc(item.id).delete();
-    
+
     _showSnackBar('Order berhasil dihapus.');
   }
 
@@ -1213,22 +1280,33 @@ class _OrderPageState extends State<OrderPage> {
               children: [
                 Text(
                   item.customerName,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 18),
                 ),
                 const SizedBox(height: 12),
                 const Divider(height: 1, color: Colors.black12),
                 const SizedBox(height: 12),
-                Text('Tgl Pengambilan: ${_dateFormat.format(item.pickupDate)}', style: const TextStyle(fontSize: 15)),
+                Text('Tgl Pengambilan: ${_dateFormat.format(item.pickupDate)}',
+                    style: const TextStyle(fontSize: 15)),
                 const SizedBox(height: 8),
-                Text(item.hasItems ? 'Pesanan: ${item.weightKg.toInt()} macam item' : 'Bobot: ${item.weightKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 15)),
+                Text(
+                    item.hasItems
+                        ? 'Pesanan: ${item.weightKg.toInt()} item'
+                        : 'Bobot: ${item.weightKg.toStringAsFixed(1)} kg',
+                    style: const TextStyle(fontSize: 15)),
                 const SizedBox(height: 8),
                 Text(
                   'Total: ${_currencyFormat.format(item.totalPrice)}',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.green.shade700),
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                      color: Colors.green.shade700),
                 ),
                 if (item.notes != null && item.notes!.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  Text(item.hasItems ? 'Rincian Pesanan:' : 'Catatan:', style: const TextStyle(fontSize: 14, color: Colors.black54)),
+                  Text(item.hasItems ? 'Rincian Pesanan:' : 'Catatan:',
+                      style:
+                          const TextStyle(fontSize: 14, color: Colors.black54)),
                   const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
@@ -1262,7 +1340,7 @@ class _OrderPageState extends State<OrderPage> {
     // 1. Siapkan format data untuk QR Code
     final qrData = 'Resi: ${item.resi ?? '-'}\n'
         'Nama: ${item.customerName}\n'
-        '${item.hasItems ? "Item:" : "Bobot:"} ${item.hasItems ? "${item.weightKg.toInt()} macam" : "${item.weightKg.toStringAsFixed(1)} kg"}\n'
+        '${item.hasItems ? "Item:" : "Bobot:"} ${item.hasItems ? "${item.weightKg.toInt()} item" : "${item.weightKg.toStringAsFixed(1)} kg"}\n'
         'Total: ${_currencyFormat.format(item.totalPrice)}\n'
         'Tgl Ambil: ${_dateFormat.format(item.pickupDate)}';
 
@@ -1299,17 +1377,21 @@ class _OrderPageState extends State<OrderPage> {
                   const SizedBox(height: 16),
                   Text(
                     item.customerName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 18),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 4),
                   if (item.resi != null)
                     Text(
                       'No. Resi: ${item.resi}',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange.shade700, fontSize: 16),
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.deepOrange.shade700,
+                          fontSize: 16),
                     ),
                   Text(
-                  '${item.hasItems ? "${item.weightKg.toInt()} macam" : "${item.weightKg.toStringAsFixed(1)} kg"} • ${_currencyFormat.format(item.totalPrice)}\nAmbil: ${_dateFormat.format(item.pickupDate)}',
+                    '${item.hasItems ? "${item.weightKg.toInt()} item" : "${item.weightKg.toStringAsFixed(1)} kg"} • ${_currencyFormat.format(item.totalPrice)}\nAmbil: ${_dateFormat.format(item.pickupDate)}',
                     style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
                     textAlign: TextAlign.center,
                   ),
@@ -1343,7 +1425,8 @@ class _OrderPageState extends State<OrderPage> {
 
       doc.addPage(
         pw.Page(
-          pageFormat: PdfPageFormat.roll80, // Menggunakan format struk kasir 80mm
+          pageFormat:
+              PdfPageFormat.roll80, // Menggunakan format struk kasir 80mm
           build: (pw.Context context) {
             return pw.Center(
               child: pw.Column(
@@ -1351,11 +1434,14 @@ class _OrderPageState extends State<OrderPage> {
                 children: [
                   pw.Text(
                     'Pesan Keranjang',
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 16),
                   ),
                   if (item.resi != null) ...[
                     pw.SizedBox(height: 4),
-                    pw.Text('Resi: ${item.resi}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                    pw.Text('Resi: ${item.resi}',
+                        style: pw.TextStyle(
+                            fontWeight: pw.FontWeight.bold, fontSize: 12)),
                   ],
                   pw.SizedBox(height: 12),
                   pw.SizedBox(
@@ -1369,12 +1455,15 @@ class _OrderPageState extends State<OrderPage> {
                   pw.SizedBox(height: 12),
                   pw.Text(
                     item.customerName,
-                    style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14),
+                    style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold, fontSize: 14),
                     textAlign: pw.TextAlign.center,
                   ),
                   pw.SizedBox(height: 6),
                   pw.Text(
-                    item.hasItems ? 'Item: ${item.weightKg.toInt()} macam' : 'Bobot: ${item.weightKg.toStringAsFixed(1)} kg',
+                    item.hasItems
+                        ? 'Item: ${item.weightKg.toInt()} item'
+                        : 'Bobot: ${item.weightKg.toStringAsFixed(1)} kg',
                     style: const pw.TextStyle(fontSize: 12),
                   ),
                   pw.SizedBox(height: 2),
@@ -1390,7 +1479,9 @@ class _OrderPageState extends State<OrderPage> {
                   if (item.notes != null && item.notes!.isNotEmpty) ...[
                     pw.SizedBox(height: 8),
                     pw.Text(
-                      item.hasItems ? 'Rincian:\n${item.notes}' : 'Catatan: ${item.notes}',
+                      item.hasItems
+                          ? 'Rincian:\n${item.notes}'
+                          : 'Catatan: ${item.notes}',
                       style: const pw.TextStyle(fontSize: 10),
                       textAlign: pw.TextAlign.center,
                     ),
@@ -1457,7 +1548,8 @@ class _OrderPageState extends State<OrderPage> {
         _currentPage = 0;
       });
 
-      _showSnackBar('Import XLSX berhasil. ${importedOrders.length} order dimuat.');
+      _showSnackBar(
+          'Import XLSX berhasil. ${importedOrders.length} order dimuat.');
     } catch (e) {
       _showSnackBar('Gagal import XLSX: $e');
     }
@@ -1535,13 +1627,15 @@ class _OrderPageState extends State<OrderPage> {
             .value = excel.TextCellValue(OrderItem.toIsoDate(item.pickupDate));
 
         sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: 3,
-                rowIndex: dataRow,
-              ),
-            )
-            .value = excel.DoubleCellValue(item.weightKg);
+                .cell(
+                  excel.CellIndex.indexByColumnRow(
+                    columnIndex: 3,
+                    rowIndex: dataRow,
+                  ),
+                )
+                .value =
+            excel.DoubleCellValue(
+                item.actualWeightKg); // Ekspor Excel mencatat nilai aktual kg
 
         sheet
             .cell(
@@ -1560,7 +1654,7 @@ class _OrderPageState extends State<OrderPage> {
               ),
             )
             .value = excel.DoubleCellValue(item.totalPrice);
-            
+
         sheet
             .cell(
               excel.CellIndex.indexByColumnRow(
@@ -1618,8 +1712,9 @@ class _OrderPageState extends State<OrderPage> {
     final rows = sheet.rows;
     if (rows.isEmpty) throw Exception('File XLSX kosong.');
 
-    final header =
-        rows.first.map((cell) => _cellToString(cell).trim().toLowerCase()).toList();
+    final header = rows.first
+        .map((cell) => _cellToString(cell).trim().toLowerCase())
+        .toList();
 
     final customerIndex = header.indexOf('customer_name');
     final phoneIndex = header.indexOf('customer_phone');
@@ -1643,13 +1738,16 @@ class _OrderPageState extends State<OrderPage> {
       final row = rows[i];
       if (row.every((cell) => _cellToString(cell).trim().isEmpty)) continue;
 
-      final customerName = _normalizeCustomerName(_readCell(row, customerIndex));
-      final customerPhone = phoneIndex != -1 ? _readCell(row, phoneIndex).trim() : null;
+      final customerName =
+          _normalizeCustomerName(_readCell(row, customerIndex));
+      final customerPhone =
+          phoneIndex != -1 ? _readCell(row, phoneIndex).trim() : null;
       final orderDate = _parseFlexibleDate(_readCell(row, orderDateIndex));
       final pickupDate = _parseFlexibleDate(_readCell(row, pickupDateIndex));
       final weightKg = _parseFlexibleDouble(_readCell(row, weightIndex));
       final isPickedUp = _parseBool(_readCell(row, pickedIndex));
-      final notesStr = notesIndex != -1 ? _readCell(row, notesIndex).trim() : '';
+      final notesStr =
+          notesIndex != -1 ? _readCell(row, notesIndex).trim() : '';
       final resiStr = resiIndex != -1 ? _readCell(row, resiIndex).trim() : '';
 
       if (customerName.isNotEmpty &&
@@ -1726,259 +1824,311 @@ class _OrderPageState extends State<OrderPage> {
 
   Widget _buildInputTab() {
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 550),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Catat Pesanan',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                  color: Colors.black87,
                 ),
-              ],
-            ),
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.deepOrange.shade50,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: const Icon(Icons.add_shopping_cart, color: Colors.deepOrange, size: 28),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Masukkan informasi pelanggan dan detail item.',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 32),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
                     ),
-                    const SizedBox(width: 16),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Input Order Baru',
-                            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        return DropdownMenu<Map<String, String>>(
+                          width: constraints.maxWidth,
+                          controller: _customerController,
+                          enableFilter: true,
+                          requestFocusOnTap: true,
+                          leadingIcon: const Icon(Icons.person_outline),
+                          label: const Text('Nama Pelanggan'),
+                          hintText: 'Pilih atau ketik baru',
+                          inputDecorationTheme: InputDecorationTheme(
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 16),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
                           ),
-                          SizedBox(height: 4),
-                          Text(
-                            'Tambahkan data pesanan pelanggan',
-                            style: TextStyle(fontSize: 14, color: Colors.black54),
+                          dropdownMenuEntries: _uniqueCustomers.map((customer) {
+                            return DropdownMenuEntry<Map<String, String>>(
+                              value: customer,
+                              label: customer['name']!,
+                              trailingIcon: Text(customer['phone']!,
+                                  style: const TextStyle(
+                                      color: Colors.grey, fontSize: 13)),
+                            );
+                          }).toList(),
+                          onSelected: (Map<String, String>? customer) {
+                            if (customer != null) {
+                              _customerController.text = customer['name']!;
+                              _phoneController.text = customer['phone']!;
+                            }
+                          },
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
+                      decoration: InputDecoration(
+                        labelText: 'Nomor WhatsApp',
+                        hintText: 'Contoh: 081234567890',
+                        prefixIcon: const Icon(Icons.phone_outlined),
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: _pickPickupDate,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Tanggal Pengambilan',
+                          prefixIcon: const Icon(Icons.event_available),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
                           ),
-                        ],
+                        ),
+                        child: Text(
+                          _formatDateOrPlaceholder(
+                              _pickupDate, 'Pilih tanggal'),
+                          style: TextStyle(
+                            color: _pickupDate == null
+                                ? Colors.black54
+                                : Colors.black87,
+                            fontWeight: _pickupDate == null
+                                ? FontWeight.normal
+                                : FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blue.shade100),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Pilih menu kue di bawah untuk mencatat detail pesanan pelanggan.',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.blue.shade800),
-                        ),
-                      ),
-                    ],
-                  ),
+              ),
+              const SizedBox(height: 32),
+              const Text(
+                'Detail Item',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      return DropdownMenu<Map<String, String>>(
-                        width: constraints.maxWidth, // Mengikuti lebar maksimal form
-                        controller: _customerController,
-                        enableFilter: true, // Bisa diketik untuk mencari nama
-                        requestFocusOnTap: true, // Membuka keyboard saat diklik
-                        leadingIcon: const Icon(Icons.person_outline),
-                        label: const Text('Nama Pembeli'),
-                        hintText: 'Pilih atau ketik baru',
-                        inputDecorationTheme: InputDecorationTheme(
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: Colors.grey.shade300),
-                          ),
-                        ),
-                        dropdownMenuEntries: _uniqueCustomers.map((customer) {
-                          return DropdownMenuEntry<Map<String, String>>(
-                            value: customer,
-                            label: customer['name']!,
-                            // Menampilkan nomor HP di samping opsi nama sebagai bantuan
-                            trailingIcon: Text(customer['phone']!, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-                          );
-                        }).toList(),
-                        onSelected: (Map<String, String>? customer) {
-                          if (customer != null) {
-                            _customerController.text = customer['name']!;
-                            _phoneController.text = customer['phone']!;
-                          }
-                        },
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    decoration: InputDecoration(
-                      labelText: 'Nomor WhatsApp (Pembeli)',
-                      hintText: 'Contoh: 081234567890',
-                      prefixIcon: const Icon(Icons.phone_outlined),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  InkWell(
-                    onTap: _pickPickupDate,
-                    borderRadius: BorderRadius.circular(16),
-                    child: InputDecorator(
-                      decoration: InputDecoration(
-                        labelText: 'Tgl Pengambilan',
-                        prefixIcon: const Icon(Icons.event_available),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          borderSide: BorderSide(color: Colors.grey.shade300),
-                        ),
-                      ),
-                      child: Text(
-                        _formatDateOrPlaceholder(_pickupDate, 'Pilih tanggal'),
-                        style: TextStyle(color: _pickupDate == null ? Colors.black54 : Colors.black87),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text('Menu Pesanan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 12),
-                  ..._menuItems.map((item) {
-                    final id = item['id'] as String;
-                    final qty = _cart[id] ?? 0;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Row(
+                child: Column(
+                  children: [
+                    ..._menuItems.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+                      final id = item['id'] as String;
+                      final qty = _cart[id] ?? 0;
+                      return Column(
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 20, vertical: 16),
+                            child: Row(
                               children: [
-                                Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87)),
-                                const SizedBox(height: 2),
-                                Text('${_currencyFormat.format(item['price'])} / ${item['unit']}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(item['name'] as String,
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 15,
+                                              color: Colors.black87)),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                          '${_currencyFormat.format(item['price'])} / ${item['unit']}',
+                                          style: TextStyle(
+                                              color: Colors.deepOrange.shade600,
+                                              fontWeight: FontWeight.w500,
+                                              fontSize: 13)),
+                                    ],
+                                  ),
+                                ),
+                                if (qty == 0)
+                                  FilledButton.tonal(
+                                    onPressed: () => _updateCart(id, 1),
+                                    style: FilledButton.styleFrom(
+                                      backgroundColor:
+                                          Colors.deepOrange.shade50,
+                                      foregroundColor:
+                                          Colors.deepOrange.shade700,
+                                      shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12)),
+                                      minimumSize: const Size(80, 40),
+                                      padding: EdgeInsets.zero,
+                                    ),
+                                    child: const Text('Tambah',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold)),
+                                  )
+                                else
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          onPressed: () => _updateCart(id, -1),
+                                          icon: const Icon(Icons.remove),
+                                          color: Colors.deepOrange.shade700,
+                                          iconSize: 18,
+                                          splashRadius: 20,
+                                        ),
+                                        SizedBox(
+                                          width: 32,
+                                          child: Text('$qty',
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 15),
+                                              textAlign: TextAlign.center),
+                                        ),
+                                        IconButton(
+                                          onPressed: () => _updateCart(id, 1),
+                                          icon: const Icon(Icons.add),
+                                          color: Colors.deepOrange.shade700,
+                                          iconSize: 18,
+                                          splashRadius: 20,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
-                          if (qty == 0)
-                            OutlinedButton(
-                              onPressed: () => _updateCart(id, 1),
-                              style: OutlinedButton.styleFrom(
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                side: BorderSide(color: Colors.deepOrange.shade400),
-                                minimumSize: const Size(80, 36),
-                              ),
-                              child: Text('Tambah', style: TextStyle(color: Colors.deepOrange.shade600, fontWeight: FontWeight.bold)),
-                            )
-                          else
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Colors.grey.shade300),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  InkWell(
-                                    onTap: () => _updateCart(id, -1),
-                                    child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.remove, size: 20, color: Colors.deepOrange)),
-                                  ),
-                                  Container(
-                                    width: 24,
-                                    alignment: Alignment.center,
-                                    child: Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center),
-                                  ),
-                                  InkWell(
-                                    onTap: () => _updateCart(id, 1),
-                                    child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.add, size: 20, color: Colors.deepOrange)),
-                                  ),
-                                ],
-                              ),
-                            ),
+                          if (index < _menuItems.length - 1)
+                            Divider(
+                                height: 1,
+                                color: Colors.grey.shade100,
+                                indent: 20,
+                                endIndent: 20),
                         ],
-                      ),
-                    );
-                  }),
-                  if (_cart.isNotEmpty) ...[
-                    const Divider(height: 24, color: Colors.black12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Total Tagihan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text(_currencyFormat.format(_totalCartPrice), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.deepOrange)),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
+                      );
+                    }),
                   ],
-                  TextField(
-                    controller: _notesController,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText: 'Catatan (Opsional)',
-                      hintText: 'Contoh: Kemasan dipisah, boks warna merah, dll.',
-                      alignLabelWithHint: true,
-                      prefixIcon: const Padding(
-                        padding: EdgeInsets.only(bottom: 24),
-                        child: Icon(Icons.notes),
-                      ),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        backgroundColor: Colors.deepOrange,
-                        elevation: 2,
-                      ),
-                      onPressed: _addOrder,
-                      icon: const Icon(Icons.save_alt, size: 24),
-                      label: const Text(
-                        'Simpan Order',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+              if (_cart.isNotEmpty) ...[
+                const SizedBox(height: 32),
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.deepOrange,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.deepOrange.withOpacity(0.3),
+                        blurRadius: 16,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Total Tagihan',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                              color: Colors.white)),
+                      Text(_currencyFormat.format(_totalCartPrice),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: Colors.white)),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    backgroundColor: Colors.deepOrange,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                  ),
+                  onPressed: _addOrder,
+                  child: const Text(
+                    'Simpan Order',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
   }
 
   Widget _buildEmptyOrderState() {
@@ -2048,7 +2198,9 @@ class _OrderPageState extends State<OrderPage> {
     try {
       final resiMatch = RegExp(r'Resi:\s*(.*?)\n').firstMatch(qrData);
       final nameMatch = RegExp(r'Nama:\s*(.*?)\n').firstMatch(qrData);
-      final weightMatch = RegExp(r'(?:Bobot|Item):\s*([\d\.]+)\s*(?:kg|macam)').firstMatch(qrData);
+      final weightMatch =
+          RegExp(r'(?:Bobot|Item):\s*([\d\.]+)\s*(?:kg|macam|item)')
+              .firstMatch(qrData);
 
       List<OrderItem> matchingOrders = [];
 
@@ -2061,10 +2213,11 @@ class _OrderPageState extends State<OrderPage> {
         final parsedWeightStr = weightMatch.group(1)?.trim();
 
         if (parsedName != null && parsedWeightStr != null) {
-          matchingOrders = _orders.where((o) =>
-              o.customerName.toLowerCase() == parsedName.toLowerCase() &&
-              o.weightKg.toStringAsFixed(1) == parsedWeightStr
-          ).toList();
+          matchingOrders = _orders
+              .where((o) =>
+                  o.customerName.toLowerCase() == parsedName.toLowerCase() &&
+                  o.weightKg.toStringAsFixed(1) == parsedWeightStr)
+              .toList();
         }
       }
 
@@ -2100,11 +2253,13 @@ class _OrderPageState extends State<OrderPage> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.check_circle_outline, color: Colors.green, size: 64),
+              const Icon(Icons.check_circle_outline,
+                  color: Colors.green, size: 64),
               const SizedBox(height: 16),
               Text(
                 order.customerName,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 12),
@@ -2118,29 +2273,48 @@ class _OrderPageState extends State<OrderPage> {
                 child: Column(
                   children: [
                     if (order.resi != null) ...[
-                      Text('No. Resi: ${order.resi}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text('No. Resi: ${order.resi}',
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16)),
                       const SizedBox(height: 4),
                     ],
-                    Text('Bobot: ${order.weightKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 15)),
+                    Text(
+                        order.hasItems
+                            ? 'Jumlah Item: ${order.weightKg.toInt()} item'
+                            : 'Bobot: ${order.weightKg.toStringAsFixed(1)} kg',
+                        style: const TextStyle(fontSize: 15)),
                     const SizedBox(height: 4),
-                    Text('Total: ${_currencyFormat.format(order.totalPrice)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text('Total: ${_currencyFormat.format(order.totalPrice)}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
                     const SizedBox(height: 4),
-                    Text('Tgl Ambil: ${_dateFormat.format(order.pickupDate)}', style: const TextStyle(fontSize: 15)),
+                    Text('Tgl Ambil: ${_dateFormat.format(order.pickupDate)}',
+                        style: const TextStyle(fontSize: 15)),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               if (order.isPickedUp)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(color: Colors.red.shade50, borderRadius: BorderRadius.circular(8)),
-                  child: const Text('Status: SUDAH DIAMBIL', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: const Text('Status: SUDAH DIAMBIL',
+                      style: TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.bold)),
                 )
               else
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(8)),
-                  child: const Text('Status: BELUM DIAMBIL', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(8)),
+                  child: const Text('Status: BELUM DIAMBIL',
+                      style: TextStyle(
+                          color: Colors.green, fontWeight: FontWeight.bold)),
                 ),
             ],
           ),
@@ -2166,7 +2340,8 @@ class _OrderPageState extends State<OrderPage> {
                   if (order.fcmToken != null && order.fcmToken!.isNotEmpty) {
                     try {
                       final response = await http.post(
-                        Uri.parse('https://pesan-keranjang-backend.vercel.app/api/notify_completed'),
+                        Uri.parse(
+                            'https://pesan-keranjang-backend.vercel.app/api/notify_completed'),
                         headers: {'Content-Type': 'application/json'},
                         body: jsonEncode({
                           'customerName': order.customerName,
@@ -2174,21 +2349,24 @@ class _OrderPageState extends State<OrderPage> {
                           'fcmToken': order.fcmToken,
                         }),
                       );
-                      
-                      debugPrint('Vercel Response Code: ${response.statusCode}');
+
+                      debugPrint(
+                          'Vercel Response Code: ${response.statusCode}');
                       debugPrint('Vercel Response Body: ${response.body}');
                     } catch (e) {
                       debugPrint('API Request Error: $e');
                     }
                   } else {
-                    debugPrint('⚠️ FCM Token kosong! Pesanan ini mungkin dibuat manual oleh admin.');
+                    debugPrint(
+                        '⚠️ FCM Token kosong! Pesanan ini mungkin dibuat manual oleh admin.');
                   }
 
                   setState(() {
                     _selectedIndex = 2; // Pindah ke tab daftar order
                   });
                   if (context.mounted) Navigator.pop(context);
-                  _showSnackBar('Order atas nama ${order.customerName} ditandai SUDAH DIAMBIL.');
+                  _showSnackBar(
+                      'Order atas nama ${order.customerName} ditandai SUDAH DIAMBIL.');
                   setState(() => _isScanning = true);
                 },
                 icon: const Icon(Icons.check),
@@ -2202,7 +2380,7 @@ class _OrderPageState extends State<OrderPage> {
 
   Widget _buildScanTab() {
     // Mengosongkan widget kamera saat tab tidak aktif untuk menghemat RAM dan Baterai HP
-    if (_selectedIndex != 1) return const SizedBox(); 
+    if (_selectedIndex != 1) return const SizedBox();
 
     return Stack(
       children: [
@@ -2240,7 +2418,10 @@ class _OrderPageState extends State<OrderPage> {
               ),
               child: const Text(
                 'Arahkan kamera ke QR Code Pesanan',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600),
               ),
             ),
           ),
@@ -2275,8 +2456,12 @@ class _OrderPageState extends State<OrderPage> {
     }
 
     final startIndex = displayPage * _itemsPerPage;
-    final endIndex = (startIndex + _itemsPerPage > groupedEntries.length) ? groupedEntries.length : startIndex + _itemsPerPage;
-    final paginatedEntries = groupedEntries.isEmpty ? <MapEntry<String, List<OrderItem>>>[] : groupedEntries.sublist(startIndex, endIndex);
+    final endIndex = (startIndex + _itemsPerPage > groupedEntries.length)
+        ? groupedEntries.length
+        : startIndex + _itemsPerPage;
+    final paginatedEntries = groupedEntries.isEmpty
+        ? <MapEntry<String, List<OrderItem>>>[]
+        : groupedEntries.sublist(startIndex, endIndex);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -2310,7 +2495,8 @@ class _OrderPageState extends State<OrderPage> {
                             color: Colors.blue.shade50,
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Icon(Icons.calendar_month_outlined, color: Colors.blue.shade700, size: 24),
+                          child: Icon(Icons.calendar_month_outlined,
+                              color: Colors.blue.shade700, size: 24),
                         ),
                         const SizedBox(width: 12),
                         const Text(
@@ -2330,7 +2516,8 @@ class _OrderPageState extends State<OrderPage> {
                         decoration: InputDecoration(
                           labelText: 'Rentang Tanggal',
                           prefixIcon: const Icon(Icons.date_range_outlined),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16)),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
                             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -2342,7 +2529,9 @@ class _OrderPageState extends State<OrderPage> {
                         ),
                         child: Text(
                           _formatRangeText(),
-                          style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                              color: Colors.black87,
+                              fontWeight: FontWeight.w500),
                         ),
                       ),
                     ),
@@ -2386,11 +2575,10 @@ class _OrderPageState extends State<OrderPage> {
                 children: [
                   Expanded(
                     child: _summaryCard(
-                      title: 'Total Bobot',
-                      value: '${_totalOrderedWeight.toStringAsFixed(1)} kg',
-                      icon: Icons.inventory_2,
-                      color : Colors.deepOrange.shade300
-                    ),
+                        title: 'Total Bobot',
+                        value: '${_totalOrderedWeight.toStringAsFixed(1)} kg',
+                        icon: Icons.inventory_2,
+                        color: Colors.deepOrange.shade300),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
@@ -2414,7 +2602,10 @@ class _OrderPageState extends State<OrderPage> {
               const SizedBox(height: 40),
               const Text(
                 'Daftar Pesanan',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.black87),
+                style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -2428,7 +2619,8 @@ class _OrderPageState extends State<OrderPage> {
                   prefixIcon: const Icon(Icons.search, color: Colors.grey),
                   filled: true,
                   fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
                     borderSide: BorderSide.none,
@@ -2444,7 +2636,7 @@ class _OrderPageState extends State<OrderPage> {
                 ),
               ),
               const SizedBox(height: 24),
-        if (groupedEntries.isEmpty)
+              if (groupedEntries.isEmpty)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
@@ -2458,8 +2650,7 @@ class _OrderPageState extends State<OrderPage> {
                     textAlign: TextAlign.center,
                   ),
                 )
-              else
-              ...[
+              else ...[
                 Column(
                   children: paginatedEntries.map((entry) {
                     final customerName = entry.key;
@@ -2470,10 +2661,13 @@ class _OrderPageState extends State<OrderPage> {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: allPickedUp ? Colors.green.shade50 : Colors.white,
+                        color:
+                            allPickedUp ? Colors.green.shade50 : Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                          color: allPickedUp ? Colors.green.shade400 : Colors.grey.shade300,
+                          color: allPickedUp
+                              ? Colors.green.shade400
+                              : Colors.grey.shade300,
                         ),
                       ),
                       child: Column(
@@ -2492,232 +2686,329 @@ class _OrderPageState extends State<OrderPage> {
                                 ),
                               ),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: allPickedUp ? Colors.green.shade100 : Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  allPickedUp ? Icons.check_circle_outline : Icons.inventory_2_outlined,
-                                  size: 16,
-                                  color: allPickedUp ? Colors.green.shade700 : Colors.red.shade700,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                              'Sisa : ${_getRemainingWeightPerCustomer(items).toStringAsFixed(1)}',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w800,
-                                    color: allPickedUp ? Colors.green.shade800 : Colors.red.shade800,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ...items.asMap().entries.map((itemEntry) {
-                        final index = itemEntry.key;
-                        final item = itemEntry.value;
-                        final isPickedUp = item.isPickedUp;
-
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (index > 0)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 12),
-                                child: Divider(height: 1, color: Colors.black12),
-                              ),
-                              Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  onTap: () => _showOrderDetails(item),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: allPickedUp
+                                      ? Colors.green.shade100
+                                      : Colors.red.shade50,
                                   borderRadius: BorderRadius.circular(8),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-                                    child: Column(
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              'Pesan: ${_dateFormat.format(item.orderDate)}',
-                                              style: const TextStyle(fontSize: 12, color: Colors.black54),
-                                            ),
-                                            Row(
-                                              children: [
-                                                if (item.notes != null && item.notes!.isNotEmpty)
-                                                  Padding(
-                                                    padding: const EdgeInsets.only(right: 8.0),
-                                                    child: Icon(Icons.notes, size: 18, color: Colors.deepOrange.shade300),
-                                                  ),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                  decoration: BoxDecoration(
-                                                    color: isPickedUp ? Colors.green.shade100 : Colors.deepOrange.shade50,
-                                                    borderRadius: BorderRadius.circular(8),
-                                                  ),
-                                                  child: Row(
-                                                    children: [
-                                                      Icon(
-                                                        Icons.event_available,
-                                                        size: 16,
-                                                        color: isPickedUp ? Colors.green.shade700 : Colors.deepOrange.shade700,
-                                                      ),
-                                                      const SizedBox(width: 6),
-                                                      Text(
-                                                        'Ambil: ${_dateFormat.format(item.pickupDate)}',
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          fontWeight: FontWeight.w800,
-                                                          color: isPickedUp ? Colors.green.shade800 : Colors.deepOrange.shade800,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 16),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          crossAxisAlignment: CrossAxisAlignment.end,
-                                          children: [
-                                            Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                            Text(item.hasItems ? 'Jumlah Item' : 'Bobot Pesanan', style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                              item.hasItems ? '${item.weightKg.toInt()} macam' : '${item.weightKg.toStringAsFixed(2)} kg',
-                                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                                ),
-                                              ],
-                                            ),
-                                            Column(
-                                              crossAxisAlignment: CrossAxisAlignment.end,
-                                              children: [
-                                                const Text('Total Harga', style: TextStyle(fontSize: 12, color: Colors.black54)),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  _currencyFormat.format(item.totalPrice),
-                                                  style: TextStyle(
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.w900,
-                                                    color: Colors.green.shade700,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      ],
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      allPickedUp
+                                          ? Icons.check_circle_outline
+                                          : Icons.inventory_2_outlined,
+                                      size: 16,
+                                      color: allPickedUp
+                                          ? Colors.green.shade700
+                                          : Colors.red.shade700,
                                     ),
-                                  ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Sisa : ${_getRemainingWeightPerCustomer(items).toStringAsFixed(1)} kg',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w800,
+                                        color: allPickedUp
+                                            ? Colors.green.shade800
+                                            : Colors.red.shade800,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 12),
-                              child: Divider(height: 1, color: Colors.black12),
-                            ),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: InkWell(
-                                    onTap: () async {
-                                  final newStatus = !item.isPickedUp;
-                                      // Update toggle di Firestore
-                                      await FirebaseFirestore.instance
-                                          .collection('orders')
-                                          .doc(item.id)
-                                          .update({'isPickedUp': newStatus});
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          ...items.asMap().entries.map((itemEntry) {
+                            final index = itemEntry.key;
+                            final item = itemEntry.value;
+                            final isPickedUp = item.isPickedUp;
 
-                                  // Kirim notifikasi jika status diubah menjadi "Sudah Diambil"
-                                  if (newStatus) {
-                                    if (item.fcmToken != null && item.fcmToken!.isNotEmpty) {
-                                      try {
-                                        final response = await http.post(
-                                          Uri.parse('https://pesan-keranjang-backend.vercel.app/api/notify_completed'),
-                                          headers: {'Content-Type': 'application/json'},
-                                          body: jsonEncode({
-                                            'customerName': item.customerName,
-                                            'resi': item.resi,
-                                            'fcmToken': item.fcmToken,
-                                          }),
-                                        );
-                                        
-                                        debugPrint('Vercel Response Code: ${response.statusCode}');
-                                        debugPrint('Vercel Response Body: ${response.body}');
-                                      } catch (e) {
-                                        debugPrint('API Request Error: $e');
-                                      }
-                                    } else {
-                                      debugPrint('⚠️ FCM Token kosong! Pesanan ini mungkin dibuat manual oleh admin.');
-                                    }
-                                  }
-                                    },
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (index > 0)
+                                  const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 12),
+                                    child: Divider(
+                                        height: 1, color: Colors.black12),
+                                  ),
+                                Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: () => _showOrderDetails(item),
                                     borderRadius: BorderRadius.circular(8),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: isPickedUp ? Colors.green : Colors.white,
-                                        border: Border.all(
-                                          color: isPickedUp ? Colors.green : Colors.red.shade300,
-                                        ),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 4, horizontal: 4),
+                                      child: Column(
                                         children: [
-                                          Icon(
-                                            isPickedUp ? Icons.check_circle : Icons.inventory_2_outlined,
-                                            size: 18,
-                                            color: isPickedUp ? Colors.white : Colors.red,
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Text(
+                                                'Pesan: ${_dateFormat.format(item.orderDate)}',
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.black54),
+                                              ),
+                                              Row(
+                                                children: [
+                                                  if (item.notes != null &&
+                                                      item.notes!.isNotEmpty)
+                                                    Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                              right: 8.0),
+                                                      child: Icon(Icons.notes,
+                                                          size: 18,
+                                                          color: Colors
+                                                              .deepOrange
+                                                              .shade300),
+                                                    ),
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 6),
+                                                    decoration: BoxDecoration(
+                                                      color: isPickedUp
+                                                          ? Colors
+                                                              .green.shade100
+                                                          : Colors.deepOrange
+                                                              .shade50,
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              8),
+                                                    ),
+                                                    child: Row(
+                                                      children: [
+                                                        Icon(
+                                                          Icons.event_available,
+                                                          size: 16,
+                                                          color: isPickedUp
+                                                              ? Colors.green
+                                                                  .shade700
+                                                              : Colors
+                                                                  .deepOrange
+                                                                  .shade700,
+                                                        ),
+                                                        const SizedBox(
+                                                            width: 6),
+                                                        Text(
+                                                          'Ambil: ${_dateFormat.format(item.pickupDate)}',
+                                                          style: TextStyle(
+                                                            fontSize: 13,
+                                                            fontWeight:
+                                                                FontWeight.w800,
+                                                            color: isPickedUp
+                                                                ? Colors.green
+                                                                    .shade800
+                                                                : Colors
+                                                                    .deepOrange
+                                                                    .shade800,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                           ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            isPickedUp ? 'Sudah Diambil' : 'Belum Diambil',
-                                            style: TextStyle(
-                                              color: isPickedUp ? Colors.white : Colors.red,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 14,
-                                            ),
+                                          const SizedBox(height: 16),
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.end,
+                                            children: [
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                      item.hasItems
+                                                          ? 'Jumlah Item'
+                                                          : 'Bobot Pesanan',
+                                                      style: const TextStyle(
+                                                          fontSize: 12,
+                                                          color:
+                                                              Colors.black54)),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    item.hasItems
+                                                        ? '${item.weightKg.toInt()} item'
+                                                        : '${item.weightKg.toStringAsFixed(2)} kg',
+                                                    style: const TextStyle(
+                                                        fontSize: 18,
+                                                        fontWeight:
+                                                            FontWeight.bold),
+                                                  ),
+                                                ],
+                                              ),
+                                              Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.end,
+                                                children: [
+                                                  const Text('Total Harga',
+                                                      style: TextStyle(
+                                                          fontSize: 12,
+                                                          color:
+                                                              Colors.black54)),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    _currencyFormat.format(
+                                                        item.totalPrice),
+                                                    style: TextStyle(
+                                                      fontSize: 18,
+                                                      fontWeight:
+                                                          FontWeight.w900,
+                                                      color:
+                                                          Colors.green.shade700,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                IconButton(
-                                  icon: const Icon(Icons.qr_code_2, color: Colors.black),
-                                  onPressed: () => _showQrCode(item),
-                                  tooltip: 'Tampilkan QR Code',
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child:
+                                      Divider(height: 1, color: Colors.black12),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, color: Colors.blue),
-                                  onPressed: () => _editOrder(item),
-                                  tooltip: 'Edit',
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                                  onPressed: () => _deleteOrder(item),
-                                  tooltip: 'Hapus',
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: InkWell(
+                                        onTap: () async {
+                                          final newStatus = !item.isPickedUp;
+                                          // Update toggle di Firestore
+                                          await FirebaseFirestore.instance
+                                              .collection('orders')
+                                              .doc(item.id)
+                                              .update(
+                                                  {'isPickedUp': newStatus});
+
+                                          // Kirim notifikasi jika status diubah menjadi "Sudah Diambil"
+                                          if (newStatus) {
+                                            if (item.fcmToken != null &&
+                                                item.fcmToken!.isNotEmpty) {
+                                              try {
+                                                final response =
+                                                    await http.post(
+                                                  Uri.parse(
+                                                      'https://pesan-keranjang-backend.vercel.app/api/notify_completed'),
+                                                  headers: {
+                                                    'Content-Type':
+                                                        'application/json'
+                                                  },
+                                                  body: jsonEncode({
+                                                    'customerName':
+                                                        item.customerName,
+                                                    'resi': item.resi,
+                                                    'fcmToken': item.fcmToken,
+                                                  }),
+                                                );
+
+                                                debugPrint(
+                                                    'Vercel Response Code: ${response.statusCode}');
+                                                debugPrint(
+                                                    'Vercel Response Body: ${response.body}');
+                                              } catch (e) {
+                                                debugPrint(
+                                                    'API Request Error: $e');
+                                              }
+                                            } else {
+                                              debugPrint(
+                                                  '⚠️ FCM Token kosong! Pesanan ini mungkin dibuat manual oleh admin.');
+                                            }
+                                          }
+                                        },
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 10),
+                                          decoration: BoxDecoration(
+                                            color: isPickedUp
+                                                ? Colors.green
+                                                : Colors.white,
+                                            border: Border.all(
+                                              color: isPickedUp
+                                                  ? Colors.green
+                                                  : Colors.red.shade300,
+                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(
+                                                isPickedUp
+                                                    ? Icons.check_circle
+                                                    : Icons
+                                                        .inventory_2_outlined,
+                                                size: 18,
+                                                color: isPickedUp
+                                                    ? Colors.white
+                                                    : Colors.red,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Text(
+                                                isPickedUp
+                                                    ? 'Sudah Diambil'
+                                                    : 'Belum Diambil',
+                                                style: TextStyle(
+                                                  color: isPickedUp
+                                                      ? Colors.white
+                                                      : Colors.red,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 14,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(Icons.qr_code_2,
+                                          color: Colors.black),
+                                      onPressed: () => _showQrCode(item),
+                                      tooltip: 'Tampilkan QR Code',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined,
+                                          color: Colors.blue),
+                                      onPressed: () => _editOrder(item),
+                                      tooltip: 'Edit',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline,
+                                          color: Colors.red),
+                                      onPressed: () => _deleteOrder(item),
+                                      tooltip: 'Hapus',
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
-                          ],
-                        );
-                      }),
-                    ],
-                  ),
+                            );
+                          }),
+                        ],
+                      ),
                     );
                   }).toList(),
                 ),
@@ -2734,14 +3025,19 @@ class _OrderPageState extends State<OrderPage> {
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: IconButton(
-                            onPressed: displayPage > 0 ? () => setState(() => _currentPage = displayPage - 1) : null,
+                            onPressed: displayPage > 0
+                                ? () => setState(
+                                    () => _currentPage = displayPage - 1)
+                                : null,
                             icon: const Icon(Icons.chevron_left),
                           ),
                         ),
                         const SizedBox(width: 16),
                         Text(
                           'Halaman ${displayPage + 1} dari $totalPages',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey.shade800),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey.shade800),
                         ),
                         const SizedBox(width: 16),
                         Container(
@@ -2751,7 +3047,10 @@ class _OrderPageState extends State<OrderPage> {
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: IconButton(
-                            onPressed: displayPage < totalPages - 1 ? () => setState(() => _currentPage = displayPage + 1) : null,
+                            onPressed: displayPage < totalPages - 1
+                                ? () => setState(
+                                    () => _currentPage = displayPage + 1)
+                                : null,
                             icon: const Icon(Icons.chevron_right),
                           ),
                         ),
@@ -2860,16 +3159,20 @@ class _OrderPageState extends State<OrderPage> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            _buildNavItem(0, Icons.add_shopping_cart_outlined, Icons.add_shopping_cart, 'Input Order'),
-            _buildCenterNavItem(1, Icons.qr_code_scanner_outlined, Icons.qr_code_scanner, 'Scan QR'),
-            _buildNavItem(2, Icons.list_alt_outlined, Icons.list_alt, 'Daftar Order'),
+            _buildNavItem(0, Icons.add_shopping_cart_outlined,
+                Icons.add_shopping_cart, 'Input Order'),
+            _buildCenterNavItem(1, Icons.qr_code_scanner_outlined,
+                Icons.qr_code_scanner, 'Scan QR'),
+            _buildNavItem(
+                2, Icons.list_alt_outlined, Icons.list_alt, 'Daftar Order'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildNavItem(int index, IconData icon, IconData activeIcon, String label) {
+  Widget _buildNavItem(
+      int index, IconData icon, IconData activeIcon, String label) {
     final isSelected = _selectedIndex == index;
     return Expanded(
       child: InkWell(
@@ -2889,7 +3192,8 @@ class _OrderPageState extends State<OrderPage> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               decoration: BoxDecoration(
-                color: isSelected ? Colors.deepOrange.shade50 : Colors.transparent,
+                color:
+                    isSelected ? Colors.deepOrange.shade50 : Colors.transparent,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Icon(
@@ -2913,7 +3217,8 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
-  Widget _buildCenterNavItem(int index, IconData icon, IconData activeIcon, String label) {
+  Widget _buildCenterNavItem(
+      int index, IconData icon, IconData activeIcon, String label) {
     final isSelected = _selectedIndex == index;
     return Expanded(
       child: GestureDetector(
@@ -2935,7 +3240,8 @@ class _OrderPageState extends State<OrderPage> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.deepOrange.withOpacity(isSelected ? 0.4 : 0.2),
+                    color:
+                        Colors.deepOrange.withOpacity(isSelected ? 0.4 : 0.2),
                     blurRadius: isSelected ? 12 : 8,
                     offset: const Offset(0, 4),
                   ),
@@ -2968,7 +3274,8 @@ class _OrderPageState extends State<OrderPage> {
       appBar: AppBar(
         title: const Text(
           'Pesan Keranjang',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange),
+          style:
+              TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange),
         ),
         centerTitle: true,
         actions: [
@@ -3076,7 +3383,10 @@ class ReminderPage extends StatelessWidget {
                     const SizedBox(height: 12),
                     Text(
                       'Tidak ada jadwal pengambilan pesanan untuk hari ini atau besok.',
-                      style: TextStyle(fontSize: 15, color: Colors.grey.shade500, height: 1.4),
+                      style: TextStyle(
+                          fontSize: 15,
+                          color: Colors.grey.shade500,
+                          height: 1.4),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -3084,12 +3394,13 @@ class ReminderPage extends StatelessWidget {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.only(left: 16, right: 16, top: 16, bottom: 80),
+              padding: const EdgeInsets.only(
+                  left: 16, right: 16, top: 16, bottom: 80),
               itemCount: upcomingOrders.length,
               itemBuilder: (context, index) {
                 final o = upcomingOrders[index];
-                final isToday = DateTime(o.pickupDate.year, o.pickupDate.month,
-                        o.pickupDate.day)
+                final isToday = DateTime(
+                        o.pickupDate.year, o.pickupDate.month, o.pickupDate.day)
                     .isAtSameMomentAs(today);
                 return Container(
                   margin: const EdgeInsets.only(bottom: 16),
@@ -3104,7 +3415,9 @@ class ReminderPage extends StatelessWidget {
                       ),
                     ],
                     border: Border.all(
-                      color: isToday ? Colors.red.shade100 : Colors.orange.shade100,
+                      color: isToday
+                          ? Colors.red.shade100
+                          : Colors.orange.shade100,
                       width: 1.5,
                     ),
                   ),
@@ -3116,17 +3429,24 @@ class ReminderPage extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              color: isToday ? Colors.red.shade50 : Colors.orange.shade50,
+                              color: isToday
+                                  ? Colors.red.shade50
+                                  : Colors.orange.shade50,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  isToday ? Icons.warning_rounded : Icons.schedule_rounded,
-                                  color: isToday ? Colors.red.shade600 : Colors.orange.shade600,
+                                  isToday
+                                      ? Icons.warning_rounded
+                                      : Icons.schedule_rounded,
+                                  color: isToday
+                                      ? Colors.red.shade600
+                                      : Colors.orange.shade600,
                                   size: 16,
                                 ),
                                 const SizedBox(width: 6),
@@ -3135,7 +3455,9 @@ class ReminderPage extends StatelessWidget {
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 13,
-                                    color: isToday ? Colors.red.shade700 : Colors.orange.shade700,
+                                    color: isToday
+                                        ? Colors.red.shade700
+                                        : Colors.orange.shade700,
                                   ),
                                 ),
                               ],
@@ -3170,10 +3492,11 @@ class ReminderPage extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.scale_rounded, color: Colors.grey.shade500, size: 20),
+                            Icon(Icons.scale_rounded,
+                                color: Colors.grey.shade500, size: 20),
                             const SizedBox(width: 8),
                             Text(
-                          o.hasItems ? 'Jumlah Item' : 'Bobot Pesanan',
+                              o.hasItems ? 'Jumlah Item' : 'Bobot Pesanan',
                               style: TextStyle(
                                 color: Colors.grey.shade700,
                                 fontSize: 14,
@@ -3182,7 +3505,9 @@ class ReminderPage extends StatelessWidget {
                             ),
                             const Spacer(),
                             Text(
-                          o.hasItems ? '${o.weightKg.toInt()} macam' : '${o.weightKg.toStringAsFixed(1)} kg',
+                              o.hasItems
+                                  ? '${o.weightKg.toInt()} item'
+                                  : '${o.weightKg.toStringAsFixed(1)} kg',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
