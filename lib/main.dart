@@ -19,6 +19,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart'; // File hasil generate dari flutterfire CLI
+import 'dart:math';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
@@ -171,9 +172,18 @@ class _SplashScreenState extends State<SplashScreen> {
         if (message.notification != null) {
           rootScaffoldMessengerKey.currentState?.showSnackBar(
             SnackBar(
-              content: Text('🔔 ${message.notification!.title}: ${message.notification!.body}'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('🔔 ${message.notification!.title}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  Text(message.notification!.body ?? '', maxLines: 10, overflow: TextOverflow.ellipsis),
+                ],
+              ),
               backgroundColor: Colors.deepOrange,
-              duration: const Duration(seconds: 5),
+              duration: const Duration(seconds: 5), // Diperlama agar penjual sempat membaca list
+              behavior: SnackBarBehavior.floating, // Dibuat melayang agar ukurannya menyesuaikan isi
             ),
           );
         }
@@ -237,23 +247,35 @@ class _SplashScreenState extends State<SplashScreen> {
 class OrderItem {
   String? id; // ID Dokumen dari Firestore
   String customerName;
+  String? customerPhone;
   DateTime orderDate;
   DateTime pickupDate;
   double weightKg;
   bool isPickedUp;
   String? notes;
+  String? resi;
+  String? fcmToken;
+  double? explicitTotalPrice;
+  bool hasItems;
+  Map<String, dynamic>? items;
 
   OrderItem({
     this.id,
     required this.customerName,
+    this.customerPhone,
     required this.orderDate,
     required this.pickupDate,
     required this.weightKg,
     required this.isPickedUp,
     this.notes,
+    this.resi,
+    this.fcmToken,
+    this.explicitTotalPrice,
+    this.hasItems = false,
+    this.items,
   });
 
-  double get totalPrice => weightKg * 45000;
+  double get totalPrice => explicitTotalPrice ?? (weightKg * 45000);
 
   static String toIsoDate(DateTime date) {
     final y = date.year.toString().padLeft(4, '0');
@@ -265,23 +287,50 @@ class OrderItem {
   Map<String, dynamic> toJson() {
     return {
       'customerName': customerName,
+      'customerPhone': customerPhone,
       'orderDate': orderDate.toIso8601String(),
       'pickupDate': pickupDate.toIso8601String(),
       'weightKg': weightKg,
       'isPickedUp': isPickedUp,
       'notes': notes,
+      'resi': resi,
+      'fcmToken': fcmToken,
+      'totalPrice': totalPrice,
+      if (items != null) 'items': items,
     };
   }
 
   factory OrderItem.fromJson(Map<String, dynamic> json, [String? docId]) {
+    double parsedWeight = 0.0;
+    String parsedNotes = json['notes'] ?? '';
+    bool hasItems = false;
+
+    // Mengambil data 'items' jika pesanan berasal dari aplikasi pembeli (Client)
+    if (json['items'] != null && json['items'] is Map) {
+      final itemsMap = json['items'] as Map<String, dynamic>;
+      hasItems = true; // Tandai bahwa ini pesanan gaya baru
+      
+      itemsMap.forEach((key, value) {
+        double qty = (value as num).toDouble();
+        parsedWeight += qty; // Menjumlahkan bobot/jumlah dari setiap item
+      });
+    } else {
+      parsedWeight = (json['weightKg'] as num?)?.toDouble() ?? 0.0;
+    }
+
     return OrderItem(
       id: docId,
       customerName: json['customerName'] ?? '',
+      customerPhone: json['customerPhone'],
       orderDate: DateTime.parse(json['orderDate']),
       pickupDate: DateTime.parse(json['pickupDate']),
-      weightKg: (json['weightKg'] as num).toDouble(),
+      weightKg: parsedWeight,
       isPickedUp: json['isPickedUp'] ?? false,
-      notes: json['notes'],
+      notes: parsedNotes.isEmpty ? null : parsedNotes,
+      resi: json['resi'],
+      fcmToken: json['fcmToken'],
+      explicitTotalPrice: (json['totalPrice'] as num?)?.toDouble(),
+      hasItems: hasItems,
     );
   }
 }
@@ -305,7 +354,7 @@ class _OrderPageState extends State<OrderPage> {
   StreamSubscription<QuerySnapshot>? _ordersSubscription;
 
   final TextEditingController _customerController = TextEditingController();
-  final TextEditingController _weightController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _notesController = TextEditingController();
 
   final TextEditingController _searchController = TextEditingController();
@@ -317,6 +366,52 @@ class _OrderPageState extends State<OrderPage> {
   DateTime? _pickupDate;
 
   final List<OrderItem> _orders = [];
+
+  final List<Map<String, dynamic>> _menuItems = [
+    {'id': 'kue_cina', 'name': 'Kue Cina', 'price': 45000, 'unit': 'kg'},
+    {'id': 'susunan_3', 'name': 'Susunan 3', 'price': 60000, 'unit': 'box'},
+    {'id': 'susunan_5', 'name': 'Susunan 5', 'price': 70000, 'unit': 'box'},
+    {'id': 'susunan_7', 'name': 'Susunan 7', 'price': 80000, 'unit': 'box'},
+    {'id': 'dodol_lapis', 'name': 'Dodol Lapis', 'price': 75000, 'unit': 'kg'},
+    {'id': 'dodol_biasa', 'name': 'Dodol Biasa', 'price': 65000, 'unit': 'kg'},
+    {'id': 'dodol_duren', 'name': 'Dodol Duren', 'price': 75000, 'unit': 'kg'},
+  ];
+
+  final Map<String, int> _cart = {};
+
+  int get _totalCartItems => _cart.values.fold(0, (sum, qty) => sum + qty);
+
+  double get _totalCartPrice => _menuItems.fold(0.0, (sum, item) => sum + ((_cart[item['id']] ?? 0) * (item['price'] as int)));
+
+  void _updateCart(String id, int delta) {
+    setState(() {
+      int currentQty = _cart[id] ?? 0;
+      int newQty = currentQty + delta;
+      if (newQty <= 0) {
+        _cart.remove(id);
+      } else {
+        _cart[id] = newQty;
+      }
+    });
+  }
+
+  List<Map<String, String>> get _uniqueCustomers {
+    final Map<String, String> customers = {};
+    // Urutkan pesanan dari yang terbaru agar mendapat data nama terupdate
+    final sortedOrders = List<OrderItem>.from(_orders)
+      ..sort((a, b) => b.orderDate.compareTo(a.orderDate));
+      
+    for (var order in sortedOrders) {
+      if (order.customerPhone != null && order.customerPhone!.trim().isNotEmpty) {
+        // Gunakan nomor WA sebagai kunci agar tidak ada data ganda
+        if (!customers.containsKey(order.customerPhone!)) {
+          customers[order.customerPhone!] = order.customerName;
+        }
+      }
+    }
+    return customers.entries.map((e) => {'phone': e.key, 'name': e.value}).toList()
+      ..sort((a, b) => a['name']!.toLowerCase().compareTo(b['name']!.toLowerCase()));
+  }
 
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy', 'id_ID');
   final NumberFormat _currencyFormat = NumberFormat.currency(
@@ -360,7 +455,7 @@ class _OrderPageState extends State<OrderPage> {
   void dispose() {
     _ordersSubscription?.cancel();
     _customerController.dispose();
-    _weightController.dispose();
+    _phoneController.dispose();
     _notesController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -466,7 +561,7 @@ class _OrderPageState extends State<OrderPage> {
                             ),
                           ),
                           const SizedBox(width: 16),
-                          Text('${o.weightKg.toStringAsFixed(1)} kg',
+                            Text(o.hasItems ? '${o.weightKg.toInt()} item' : '${o.weightKg.toStringAsFixed(1)} kg',
                               style: const TextStyle(
                                   fontWeight: FontWeight.bold, fontSize: 16)),
                         ],
@@ -777,16 +872,10 @@ class _OrderPageState extends State<OrderPage> {
 
   Future<void> _addOrder() async {
     final customerName = _normalizeCustomerName(_customerController.text);
-    final weightKg =
-        double.tryParse(_weightController.text.trim().replaceAll(',', '.'));
+    final customerPhone = _phoneController.text.trim();
 
-    if (customerName.isEmpty ||
-        _pickupDate == null ||
-        weightKg == null ||
-        weightKg <= 0) {
-      _showSnackBar(
-        'Lengkapi nama pembeli, tanggal ambil, dan bobot kue.',
-      );
+    if (customerName.isEmpty || customerPhone.isEmpty || _pickupDate == null || _cart.isEmpty) {
+      _showSnackBar('Lengkapi nama pembeli, No. WA, tanggal ambil, dan item.');
       return;
     }
 
@@ -799,23 +888,66 @@ class _OrderPageState extends State<OrderPage> {
       return;
     }
 
-    final notes = _notesController.text.trim();
+    final random = Random();
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    final randomString = List.generate(8, (index) => chars[random.nextInt(chars.length)]).join();
+    final noResi = 'RS-$randomString';
+
+    final List<String> summaryList = [];
+    final List<String> notifItems = [];
+    for (var entry in _cart.entries) {
+      final item = _menuItems.firstWhere((m) => m['id'] == entry.key);
+      final prefix = item['unit'] == 'kg' ? '${entry.value}kg' : '${entry.value}x';
+      summaryList.add('- $prefix ${item['name']}');
+      notifItems.add('$prefix ${item['name']}');
+    }
+    final String cartSummary = summaryList.join('\n');
+    final String itemsSummary = notifItems.join(' & ');
+    final String manualNotes = _notesController.text.trim();
+    final String finalNotes = manualNotes.isEmpty ? cartSummary : '$cartSummary\n\nCatatan Tambahan:\n$manualNotes';
+
+    // Cari fcmToken dari riwayat pesanan pelanggan ini jika ada (berdasarkan No. WA)
+    String? fcmToken;
+    // Bersihkan format nomor HP dari spasi/strip agar pencocokan 100% akurat
+    final cleanPhone = customerPhone.replaceAll(RegExp(r'\D'), '');
+    
+    final previousOrders = _orders.where((o) {
+      if (o.customerPhone == null || o.fcmToken == null || o.fcmToken!.trim().isEmpty) return false;
+      final cleanOPhone = o.customerPhone!.replaceAll(RegExp(r'\D'), '');
+      return cleanOPhone == cleanPhone;
+    }).toList();
+
+    if (previousOrders.isNotEmpty) {
+      previousOrders.sort((a, b) => b.orderDate.compareTo(a.orderDate));
+      fcmToken = previousOrders.first.fcmToken; // Ambil token dari pesanan paling terbaru
+      debugPrint('✅ FCM Token berhasil disalin: $fcmToken');
+    } else {
+      debugPrint('⚠️ FCM Token tidak ditemukan untuk histori No. WA: $cleanPhone');
+    }
+
     final newItem = OrderItem(
       customerName: customerName,
+      customerPhone: cleanPhone,
       orderDate: now,
       pickupDate: _pickupDate!,
-      weightKg: weightKg,
+      weightKg: _totalCartItems.toDouble(),
       isPickedUp: false,
-      notes: notes.isEmpty ? null : notes,
+      notes: finalNotes,
+      resi: noResi,
+      fcmToken: fcmToken,
+      hasItems: true,
+      explicitTotalPrice: _totalCartPrice,
+      items: _cart,
     );
 
     try {
-      // Simpan ke Firestore
-      final docRef = await FirebaseFirestore.instance
+      // Simpan ke Firestore menggunakan Nomor Resi sebagai ID Dokumen
+      await FirebaseFirestore.instance
           .collection('orders')
-          .add(newItem.toJson());
+          .doc(noResi)
+          .set(newItem.toJson());
       
-      newItem.id = docRef.id; // Assign ID hasil generate Firestore ke model lokal
+      newItem.id = noResi; // Assign ID ke model lokal
 
       // Panggil API Vercel untuk Broadcast Notifikasi ke Semua Admin
       try {
@@ -824,7 +956,8 @@ class _OrderPageState extends State<OrderPage> {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'customerName': newItem.customerName,
-            'weightKg': newItem.weightKg,
+            'weightKg': newItem.weightKg.toInt(),
+            'itemsSummary': itemsSummary,
           }),
         );
         if (response.statusCode != 200) {
@@ -836,9 +969,10 @@ class _OrderPageState extends State<OrderPage> {
 
       setState(() {
         _customerController.clear();
-        _weightController.clear();
+        _phoneController.clear();
         _notesController.clear();
         _pickupDate = null;
+        _cart.clear();
         _selectedIndex = 2; // Ubah ke 2 agar beralih ke 'Daftar Order' (karena tab 1 sekarang 'Scan QR')
         _currentPage = 0;
       });
@@ -851,6 +985,7 @@ class _OrderPageState extends State<OrderPage> {
 
   Future<void> _editOrder(OrderItem item) async {
     final customerController = TextEditingController(text: item.customerName);
+    final phoneController = TextEditingController(text: item.customerPhone ?? '');
     final weightController =
         TextEditingController(text: item.weightKg.toStringAsFixed(2));
     final notesController = TextEditingController(text: item.notes);
@@ -876,6 +1011,20 @@ class _OrderPageState extends State<OrderPage> {
                         decoration: InputDecoration(
                           labelText: 'Nama Pembeli',
                           prefixIcon: const Icon(Icons.person_outline),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: phoneController,
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                          labelText: 'Nomor WhatsApp',
+                          prefixIcon: const Icon(Icons.phone_outlined),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(16),
@@ -944,7 +1093,7 @@ class _OrderPageState extends State<OrderPage> {
                           decimal: true,
                         ),
                         decoration: InputDecoration(
-                          labelText: 'Bobot Kue (kg)',
+                        labelText: item.hasItems ? 'Jumlah Item' : 'Bobot Kue (kg)',
                           prefixIcon: const Icon(Icons.scale_outlined),
                           border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                           enabledBorder: OutlineInputBorder(
@@ -971,7 +1120,7 @@ class _OrderPageState extends State<OrderPage> {
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         value: selectedPickedUp,
-                        activeColor: Colors.green,
+                        activeThumbColor: Colors.green,
                         onChanged: (value) =>
                             setModalState(() => selectedPickedUp = value),
                         title: const Text('Sudah diambil'),
@@ -989,6 +1138,7 @@ class _OrderPageState extends State<OrderPage> {
                   onPressed: () async {
                     final updatedName =
                         _normalizeCustomerName(customerController.text);
+                    final updatedPhone = phoneController.text.replaceAll(RegExp(r'\D'), '');
                     final updatedWeight = double.tryParse(
                       weightController.text.trim().replaceAll(',', '.'),
                     );
@@ -1016,6 +1166,7 @@ class _OrderPageState extends State<OrderPage> {
                         .doc(item.id)
                         .update({
                       'customerName': updatedName,
+                      'customerPhone': updatedPhone.isEmpty ? null : updatedPhone,
                       'orderDate': selectedOrderDate.toIso8601String(),
                       'pickupDate': selectedPickupDate.toIso8601String(),
                       'weightKg': updatedWeight,
@@ -1069,7 +1220,7 @@ class _OrderPageState extends State<OrderPage> {
                 const SizedBox(height: 12),
                 Text('Tgl Pengambilan: ${_dateFormat.format(item.pickupDate)}', style: const TextStyle(fontSize: 15)),
                 const SizedBox(height: 8),
-                Text('Bobot: ${item.weightKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 15)),
+                Text(item.hasItems ? 'Pesanan: ${item.weightKg.toInt()} macam item' : 'Bobot: ${item.weightKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 15)),
                 const SizedBox(height: 8),
                 Text(
                   'Total: ${_currencyFormat.format(item.totalPrice)}',
@@ -1077,7 +1228,7 @@ class _OrderPageState extends State<OrderPage> {
                 ),
                 if (item.notes != null && item.notes!.isNotEmpty) ...[
                   const SizedBox(height: 16),
-                  const Text('Catatan:', style: TextStyle(fontSize: 14, color: Colors.black54)),
+                  Text(item.hasItems ? 'Rincian Pesanan:' : 'Catatan:', style: const TextStyle(fontSize: 14, color: Colors.black54)),
                   const SizedBox(height: 8),
                   Container(
                     width: double.infinity,
@@ -1109,8 +1260,9 @@ class _OrderPageState extends State<OrderPage> {
 
   void _showQrCode(OrderItem item) {
     // 1. Siapkan format data untuk QR Code
-    final qrData = 'Nama: ${item.customerName}\n'
-        'Bobot: ${item.weightKg.toStringAsFixed(1)} kg\n'
+    final qrData = 'Resi: ${item.resi ?? '-'}\n'
+        'Nama: ${item.customerName}\n'
+        '${item.hasItems ? "Item:" : "Bobot:"} ${item.hasItems ? "${item.weightKg.toInt()} macam" : "${item.weightKg.toStringAsFixed(1)} kg"}\n'
         'Total: ${_currencyFormat.format(item.totalPrice)}\n'
         'Tgl Ambil: ${_dateFormat.format(item.pickupDate)}';
 
@@ -1151,8 +1303,13 @@ class _OrderPageState extends State<OrderPage> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 4),
+                  if (item.resi != null)
+                    Text(
+                      'No. Resi: ${item.resi}',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.deepOrange.shade700, fontSize: 16),
+                    ),
                   Text(
-                    '${item.weightKg.toStringAsFixed(1)} kg • ${_currencyFormat.format(item.totalPrice)}\nAmbil: ${_dateFormat.format(item.pickupDate)}',
+                  '${item.hasItems ? "${item.weightKg.toInt()} macam" : "${item.weightKg.toStringAsFixed(1)} kg"} • ${_currencyFormat.format(item.totalPrice)}\nAmbil: ${_dateFormat.format(item.pickupDate)}',
                     style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
                     textAlign: TextAlign.center,
                   ),
@@ -1196,6 +1353,10 @@ class _OrderPageState extends State<OrderPage> {
                     'Pesan Keranjang',
                     style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16),
                   ),
+                  if (item.resi != null) ...[
+                    pw.SizedBox(height: 4),
+                    pw.Text('Resi: ${item.resi}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                  ],
                   pw.SizedBox(height: 12),
                   pw.SizedBox(
                     height: 120,
@@ -1213,7 +1374,7 @@ class _OrderPageState extends State<OrderPage> {
                   ),
                   pw.SizedBox(height: 6),
                   pw.Text(
-                    'Bobot: ${item.weightKg.toStringAsFixed(1)} kg',
+                    item.hasItems ? 'Item: ${item.weightKg.toInt()} macam' : 'Bobot: ${item.weightKg.toStringAsFixed(1)} kg',
                     style: const pw.TextStyle(fontSize: 12),
                   ),
                   pw.SizedBox(height: 2),
@@ -1229,7 +1390,7 @@ class _OrderPageState extends State<OrderPage> {
                   if (item.notes != null && item.notes!.isNotEmpty) ...[
                     pw.SizedBox(height: 8),
                     pw.Text(
-                      'Catatan: ${item.notes}',
+                      item.hasItems ? 'Rincian:\n${item.notes}' : 'Catatan: ${item.notes}',
                       style: const pw.TextStyle(fontSize: 10),
                       textAlign: pw.TextAlign.center,
                     ),
@@ -1319,6 +1480,7 @@ class _OrderPageState extends State<OrderPage> {
         'is_picked_up',
         'total_price',
         'notes',
+        'resi',
       ];
 
       for (int col = 0; col < headers.length; col++) {
@@ -1349,6 +1511,15 @@ class _OrderPageState extends State<OrderPage> {
             .cell(
               excel.CellIndex.indexByColumnRow(
                 columnIndex: 1,
+                rowIndex: dataRow,
+              ),
+            )
+            .value = excel.TextCellValue(item.customerPhone ?? '');
+
+        sheet
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 2,
                 rowIndex: dataRow,
               ),
             )
@@ -1398,6 +1569,15 @@ class _OrderPageState extends State<OrderPage> {
               ),
             )
             .value = excel.TextCellValue(item.notes ?? '');
+
+        sheet
+            .cell(
+              excel.CellIndex.indexByColumnRow(
+                columnIndex: 7,
+                rowIndex: dataRow,
+              ),
+            )
+            .value = excel.TextCellValue(item.resi ?? '');
       }
 
       final encoded = workbook.encode();
@@ -1442,11 +1622,13 @@ class _OrderPageState extends State<OrderPage> {
         rows.first.map((cell) => _cellToString(cell).trim().toLowerCase()).toList();
 
     final customerIndex = header.indexOf('customer_name');
+    final phoneIndex = header.indexOf('customer_phone');
     final orderDateIndex = header.indexOf('order_date');
     final pickupDateIndex = header.indexOf('pickup_date');
     final weightIndex = header.indexOf('weight_kg');
     final pickedIndex = header.indexOf('is_picked_up');
     final notesIndex = header.indexOf('notes');
+    final resiIndex = header.indexOf('resi');
 
     if (customerIndex == -1 ||
         orderDateIndex == -1 ||
@@ -1462,11 +1644,13 @@ class _OrderPageState extends State<OrderPage> {
       if (row.every((cell) => _cellToString(cell).trim().isEmpty)) continue;
 
       final customerName = _normalizeCustomerName(_readCell(row, customerIndex));
+      final customerPhone = phoneIndex != -1 ? _readCell(row, phoneIndex).trim() : null;
       final orderDate = _parseFlexibleDate(_readCell(row, orderDateIndex));
       final pickupDate = _parseFlexibleDate(_readCell(row, pickupDateIndex));
       final weightKg = _parseFlexibleDouble(_readCell(row, weightIndex));
       final isPickedUp = _parseBool(_readCell(row, pickedIndex));
       final notesStr = notesIndex != -1 ? _readCell(row, notesIndex).trim() : '';
+      final resiStr = resiIndex != -1 ? _readCell(row, resiIndex).trim() : '';
 
       if (customerName.isNotEmpty &&
           orderDate != null &&
@@ -1475,11 +1659,13 @@ class _OrderPageState extends State<OrderPage> {
         result.add(
           OrderItem(
             customerName: customerName,
+            customerPhone: customerPhone,
             orderDate: orderDate,
             pickupDate: pickupDate,
             weightKg: weightKg,
             isPickedUp: isPickedUp,
             notes: notesStr.isEmpty ? null : notesStr,
+            resi: resiStr.isEmpty ? null : resiStr,
           ),
         );
       }
@@ -1601,20 +1787,58 @@ class _OrderPageState extends State<OrderPage> {
                     children: [
                       Icon(Icons.info_outline, color: Colors.blue.shade700, size: 20),
                       const SizedBox(width: 12),
-                      Text(
-                        'Harga saat ini: ${_currencyFormat.format(45000)} / kg',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.blue.shade800),
+                      Expanded(
+                        child: Text(
+                          'Pilih menu kue di bawah untuk mencatat detail pesanan pelanggan.',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.blue.shade800),
+                        ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      return DropdownMenu<Map<String, String>>(
+                        width: constraints.maxWidth, // Mengikuti lebar maksimal form
+                        controller: _customerController,
+                        enableFilter: true, // Bisa diketik untuk mencari nama
+                        requestFocusOnTap: true, // Membuka keyboard saat diklik
+                        leadingIcon: const Icon(Icons.person_outline),
+                        label: const Text('Nama Pembeli'),
+                        hintText: 'Pilih atau ketik baru',
+                        inputDecorationTheme: InputDecorationTheme(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: Colors.grey.shade300),
+                          ),
+                        ),
+                        dropdownMenuEntries: _uniqueCustomers.map((customer) {
+                          return DropdownMenuEntry<Map<String, String>>(
+                            value: customer,
+                            label: customer['name']!,
+                            // Menampilkan nomor HP di samping opsi nama sebagai bantuan
+                            trailingIcon: Text(customer['phone']!, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+                          );
+                        }).toList(),
+                        onSelected: (Map<String, String>? customer) {
+                          if (customer != null) {
+                            _customerController.text = customer['name']!;
+                            _phoneController.text = customer['phone']!;
+                          }
+                        },
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
                   TextField(
-                    controller: _customerController,
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
                     decoration: InputDecoration(
-                      labelText: 'Nama Pembeli',
-                      hintText: 'Masukkan nama pelanggan',
-                      prefixIcon: const Icon(Icons.person_outline),
+                      labelText: 'Nomor WhatsApp (Pembeli)',
+                      hintText: 'Contoh: 081234567890',
+                      prefixIcon: const Icon(Icons.phone_outlined),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -1643,23 +1867,76 @@ class _OrderPageState extends State<OrderPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  TextField(
-                    controller: _weightController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: 'Bobot Kue (kg)',
-                      hintText: 'Contoh: 1 atau 2.5',
-                      prefixIcon: const Icon(Icons.scale_outlined),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: Colors.grey.shade300),
+                  const Text('Menu Pesanan', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  ..._menuItems.map((item) {
+                    final id = item['id'] as String;
+                    final qty = _cart[id] ?? 0;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87)),
+                                const SizedBox(height: 2),
+                                Text('${_currencyFormat.format(item['price'])} / ${item['unit']}', style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+                              ],
+                            ),
+                          ),
+                          if (qty == 0)
+                            OutlinedButton(
+                              onPressed: () => _updateCart(id, 1),
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                side: BorderSide(color: Colors.deepOrange.shade400),
+                                minimumSize: const Size(80, 36),
+                              ),
+                              child: Text('Tambah', style: TextStyle(color: Colors.deepOrange.shade600, fontWeight: FontWeight.bold)),
+                            )
+                          else
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  InkWell(
+                                    onTap: () => _updateCart(id, -1),
+                                    child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.remove, size: 20, color: Colors.deepOrange)),
+                                  ),
+                                  Container(
+                                    width: 24,
+                                    alignment: Alignment.center,
+                                    child: Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15), textAlign: TextAlign.center),
+                                  ),
+                                  InkWell(
+                                    onTap: () => _updateCart(id, 1),
+                                    child: const Padding(padding: EdgeInsets.all(8), child: Icon(Icons.add, size: 20, color: Colors.deepOrange)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
+                    );
+                  }),
+                  if (_cart.isNotEmpty) ...[
+                    const Divider(height: 24, color: Colors.black12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Total Tagihan', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(_currencyFormat.format(_totalCartPrice), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.deepOrange)),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 16),
+                  ],
                   TextField(
                     controller: _notesController,
                     maxLines: 2,
@@ -1769,30 +2046,35 @@ class _OrderPageState extends State<OrderPage> {
     });
 
     try {
-      // Mencari pola Nama dan Bobot dari teks QR yang di-generate sebelumnya
+      final resiMatch = RegExp(r'Resi:\s*(.*?)\n').firstMatch(qrData);
       final nameMatch = RegExp(r'Nama:\s*(.*?)\n').firstMatch(qrData);
-      final weightMatch = RegExp(r'Bobot:\s*([\d\.]+)\s*kg').firstMatch(qrData);
+      final weightMatch = RegExp(r'(?:Bobot|Item):\s*([\d\.]+)\s*(?:kg|macam)').firstMatch(qrData);
 
-      if (nameMatch != null && weightMatch != null) {
+      List<OrderItem> matchingOrders = [];
+
+      if (resiMatch != null && resiMatch.group(1)?.trim() != '-') {
+        final parsedResi = resiMatch.group(1)?.trim();
+        matchingOrders = _orders.where((o) => o.resi == parsedResi).toList();
+      } else if (nameMatch != null && weightMatch != null) {
+        // Fallback untuk QR Code lama yang belum menggunakan nomor resi
         final parsedName = nameMatch.group(1)?.trim();
         final parsedWeightStr = weightMatch.group(1)?.trim();
 
         if (parsedName != null && parsedWeightStr != null) {
-          // Cari pesanan yang persis cocok
-          final matchingOrders = _orders.where((o) =>
+          matchingOrders = _orders.where((o) =>
               o.customerName.toLowerCase() == parsedName.toLowerCase() &&
               o.weightKg.toStringAsFixed(1) == parsedWeightStr
           ).toList();
-
-          if (matchingOrders.isNotEmpty) {
-            // Prioritaskan membuka pesanan yang berstatus "Belum Diambil"
-            matchingOrders.sort((a, b) => a.isPickedUp ? 1 : -1);
-            final targetOrder = matchingOrders.first;
-
-            _showScannedOrderDialog(targetOrder);
-            return;
-          }
         }
+      }
+
+      if (matchingOrders.isNotEmpty) {
+        // Prioritaskan membuka pesanan yang berstatus "Belum Diambil"
+        matchingOrders.sort((a, b) => a.isPickedUp ? 1 : -1);
+        final targetOrder = matchingOrders.first;
+
+        _showScannedOrderDialog(targetOrder);
+        return;
       }
 
       // Jika format tidak sesuai atau order sudah terhapus
@@ -1835,6 +2117,10 @@ class _OrderPageState extends State<OrderPage> {
                 ),
                 child: Column(
                   children: [
+                    if (order.resi != null) ...[
+                      Text('No. Resi: ${order.resi}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      const SizedBox(height: 4),
+                    ],
                     Text('Bobot: ${order.weightKg.toStringAsFixed(1)} kg', style: const TextStyle(fontSize: 15)),
                     const SizedBox(height: 4),
                     Text('Total: ${_currencyFormat.format(order.totalPrice)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
@@ -1875,6 +2161,28 @@ class _OrderPageState extends State<OrderPage> {
                       .collection('orders')
                       .doc(order.id)
                       .update({'isPickedUp': true});
+
+                  // Kirim notifikasi pesanan selesai ke pelanggan
+                  if (order.fcmToken != null && order.fcmToken!.isNotEmpty) {
+                    try {
+                      final response = await http.post(
+                        Uri.parse('https://pesan-keranjang-backend.vercel.app/api/notify_completed'),
+                        headers: {'Content-Type': 'application/json'},
+                        body: jsonEncode({
+                          'customerName': order.customerName,
+                          'resi': order.resi,
+                          'fcmToken': order.fcmToken,
+                        }),
+                      );
+                      
+                      debugPrint('Vercel Response Code: ${response.statusCode}');
+                      debugPrint('Vercel Response Body: ${response.body}');
+                    } catch (e) {
+                      debugPrint('API Request Error: $e');
+                    }
+                  } else {
+                    debugPrint('⚠️ FCM Token kosong! Pesanan ini mungkin dibuat manual oleh admin.');
+                  }
 
                   setState(() {
                     _selectedIndex = 2; // Pindah ke tab daftar order
@@ -2199,7 +2507,7 @@ class _OrderPageState extends State<OrderPage> {
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  'Sisa : ${_getRemainingWeightPerCustomer(items).toStringAsFixed(1)} Kg',
+                              'Sisa : ${_getRemainingWeightPerCustomer(items).toStringAsFixed(1)}',
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w800,
@@ -2285,10 +2593,10 @@ class _OrderPageState extends State<OrderPage> {
                                             Column(
                                               crossAxisAlignment: CrossAxisAlignment.start,
                                               children: [
-                                                const Text('Bobot Pesanan', style: TextStyle(fontSize: 12, color: Colors.black54)),
+                                            Text(item.hasItems ? 'Jumlah Item' : 'Bobot Pesanan', style: const TextStyle(fontSize: 12, color: Colors.black54)),
                                                 const SizedBox(height: 2),
                                                 Text(
-                                                  '${item.weightKg.toStringAsFixed(2)} kg',
+                                              item.hasItems ? '${item.weightKg.toInt()} macam' : '${item.weightKg.toStringAsFixed(2)} kg',
                                                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                                 ),
                                               ],
@@ -2324,11 +2632,36 @@ class _OrderPageState extends State<OrderPage> {
                                 Expanded(
                                   child: InkWell(
                                     onTap: () async {
+                                  final newStatus = !item.isPickedUp;
                                       // Update toggle di Firestore
                                       await FirebaseFirestore.instance
                                           .collection('orders')
                                           .doc(item.id)
-                                          .update({'isPickedUp': !item.isPickedUp});
+                                          .update({'isPickedUp': newStatus});
+
+                                  // Kirim notifikasi jika status diubah menjadi "Sudah Diambil"
+                                  if (newStatus) {
+                                    if (item.fcmToken != null && item.fcmToken!.isNotEmpty) {
+                                      try {
+                                        final response = await http.post(
+                                          Uri.parse('https://pesan-keranjang-backend.vercel.app/api/notify_completed'),
+                                          headers: {'Content-Type': 'application/json'},
+                                          body: jsonEncode({
+                                            'customerName': item.customerName,
+                                            'resi': item.resi,
+                                            'fcmToken': item.fcmToken,
+                                          }),
+                                        );
+                                        
+                                        debugPrint('Vercel Response Code: ${response.statusCode}');
+                                        debugPrint('Vercel Response Body: ${response.body}');
+                                      } catch (e) {
+                                        debugPrint('API Request Error: $e');
+                                      }
+                                    } else {
+                                      debugPrint('⚠️ FCM Token kosong! Pesanan ini mungkin dibuat manual oleh admin.');
+                                    }
+                                  }
                                     },
                                     borderRadius: BorderRadius.circular(8),
                                     child: Container(
@@ -2382,7 +2715,7 @@ class _OrderPageState extends State<OrderPage> {
                             ),
                           ],
                         );
-                      }).toList(),
+                      }),
                     ],
                   ),
                     );
@@ -2733,7 +3066,7 @@ class ReminderPage extends StatelessWidget {
                           size: 64, color: Colors.grey.shade400),
                     ),
                     const SizedBox(height: 24),
-                    Text(
+                    const Text(
                       'Belum Ada Pengingat',
                       style: TextStyle(
                           fontSize: 22,
@@ -2840,7 +3173,7 @@ class ReminderPage extends StatelessWidget {
                             Icon(Icons.scale_rounded, color: Colors.grey.shade500, size: 20),
                             const SizedBox(width: 8),
                             Text(
-                              'Bobot Pesanan',
+                          o.hasItems ? 'Jumlah Item' : 'Bobot Pesanan',
                               style: TextStyle(
                                 color: Colors.grey.shade700,
                                 fontSize: 14,
@@ -2849,7 +3182,7 @@ class ReminderPage extends StatelessWidget {
                             ),
                             const Spacer(),
                             Text(
-                              '${o.weightKg.toStringAsFixed(1)} kg',
+                          o.hasItems ? '${o.weightKg.toInt()} macam' : '${o.weightKg.toStringAsFixed(1)} kg',
                               style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
