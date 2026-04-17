@@ -38,7 +38,7 @@ jobs:
 
       # Langkah Build: Sekarang otomatis menggunakan versi dari pubspec yang sudah diupdate
       - name: Build APK Release
-        run: flutter build apk --release
+        run: flutter build apk --release --obfuscate --split-debug-info=./debug_info
 
       - name: Rename APK File
         run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/PesanKeranjang-v1.0.${{ github.run_number }}.apk

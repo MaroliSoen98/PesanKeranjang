@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:async';
 import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:excel/excel.dart' as excel;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +13,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:ui' as ui;
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -59,7 +57,7 @@ class KueCinaApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         colorSchemeSeed: Colors.deepOrange,
-        scaffoldBackgroundColor: const Color(0xFFFFF8F3),
+        scaffoldBackgroundColor: Colors.white,
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(),
         ),
@@ -203,7 +201,7 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<List<OrderItem>> _loadOrdersFromFirestore() async {
     try {
       final snapshot =
-          await FirebaseFirestore.instance.collection('orders').get();
+          await FirebaseFirestore.instance.collection(_kCollectionOrders).get();
       return snapshot.docs
           .map((doc) => OrderItem.fromJson(doc.data(), doc.id))
           .toList();
@@ -216,7 +214,7 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8F3), // Sesuai warna latar aplikasi
+      backgroundColor: Colors.white,
       body: Center(
         child: Stack(
           children: [
@@ -254,6 +252,178 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 }
 
+class _SummaryCard extends StatelessWidget {
+  final String title;
+  final String value;
+  final IconData icon;
+  final Color? color;
+  final bool fullWidth;
+
+  const _SummaryCard({
+    required this.title,
+    required this.value,
+    required this.icon,
+    this.color,
+    this.fullWidth = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(icon, color: color ?? Colors.blue, size: 32),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: color?.withOpacity(0.8) ?? Colors.blue.shade700,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    value,
+                    style: TextStyle(
+                      fontSize: fullWidth ? 20 : 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickFilterBtn extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _QuickFilterBtn({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade700,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CustomBottomNavItem extends StatelessWidget {
+  final int index;
+  final int selectedIndex;
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final ValueChanged<int> onTap;
+
+  const _CustomBottomNavItem({
+    required this.index,
+    required this.selectedIndex,
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = selectedIndex == index;
+    return Expanded(
+      child: InkWell(
+        onTap: () => onTap(index),
+        splashColor: Colors.transparent,
+        highlightColor: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Icon(
+                isSelected ? activeIcon : icon,
+                color: isSelected ? Colors.deepOrange : Colors.grey.shade400,
+                size: isSelected ? 28 : 24,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected ? Colors.deepOrange : Colors.grey.shade500,
+              ),
+            ),
+            const SizedBox(height: 4),
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 200),
+              opacity: isSelected ? 1.0 : 0.0,
+              child: Container(
+                height: 4,
+                width: 16,
+                decoration: BoxDecoration(
+                  color: Colors.deepOrange,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Konstanta global untuk meminimalisir Magic Strings (Code Smell)
+const String _kCollectionOrders = 'orders';
+const String _kCollectionUsers = 'users';
+const String _kApiNotify =
+    'https://pesan-keranjang-backend.vercel.app/api/notify';
+const String _kApiNotifyCompleted =
+    'https://pesan-keranjang-backend.vercel.app/api/notify_completed';
+
 class OrderItem {
   String? id; // ID Dokumen dari Firestore
   String customerName;
@@ -265,7 +435,6 @@ class OrderItem {
   String? notes;
   String? resi;
   String? fcmToken;
-  double? explicitTotalPrice;
   bool hasItems;
   Map<String, dynamic>? items;
 
@@ -280,12 +449,9 @@ class OrderItem {
     this.notes,
     this.resi,
     this.fcmToken,
-    this.explicitTotalPrice,
     this.hasItems = false,
     this.items,
   });
-
-  double get totalPrice => explicitTotalPrice ?? (weightKg * 45000);
 
   // Menghitung bobot aktual dalam kg berdasarkan detail item
   double get actualWeightKg {
@@ -326,7 +492,6 @@ class OrderItem {
       'notes': notes,
       'resi': resi,
       'fcmToken': fcmToken,
-      'totalPrice': totalPrice,
       if (items != null) 'items': items,
     };
   }
@@ -359,7 +524,6 @@ class OrderItem {
       notes: parsedNotes.isEmpty ? null : parsedNotes,
       resi: json['resi'],
       fcmToken: json['fcmToken'],
-      explicitTotalPrice: (json['totalPrice'] as num?)?.toDouble(),
       hasItems: hasItems,
       items: parsedItems,
     );
@@ -383,6 +547,7 @@ class _OrderPageState extends State<OrderPage> {
   bool _isScanning = true;
 
   StreamSubscription<QuerySnapshot>? _ordersSubscription;
+  StreamSubscription<QuerySnapshot>? _usersSubscription;
 
   final TextEditingController _customerController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
@@ -398,19 +563,16 @@ class _OrderPageState extends State<OrderPage> {
   final List<OrderItem> _orders = [];
 
   final List<Map<String, dynamic>> _menuItems = [
-    {'id': 'kue_cina', 'name': 'Kue Cina', 'price': 45000, 'unit': 'kg'},
-    {'id': 'susunan_3', 'name': 'Susunan 3', 'price': 60000, 'unit': 'set'},
-    {'id': 'susunan_5', 'name': 'Susunan 5', 'price': 70000, 'unit': 'set'},
-    {'id': 'susunan_7', 'name': 'Susunan 7', 'price': 80000, 'unit': 'set'},
-    {'id': 'dodol_lapis', 'name': 'Dodol Lapis', 'price': 75000, 'unit': 'kg'},
-    {'id': 'dodol_biasa', 'name': 'Dodol Biasa', 'price': 65000, 'unit': 'kg'},
-    {'id': 'dodol_duren', 'name': 'Dodol Duren', 'price': 75000, 'unit': 'kg'},
+    {'id': 'kue_cina', 'name': 'Kue Cina', 'unit': 'kg'},
+    {'id': 'susunan_3', 'name': 'Susunan 3', 'unit': 'set'},
+    {'id': 'susunan_5', 'name': 'Susunan 5', 'unit': 'set'},
+    {'id': 'susunan_7', 'name': 'Susunan 7', 'unit': 'set'},
+    {'id': 'dodol_lapis', 'name': 'Dodol Lapis', 'unit': 'kg'},
+    {'id': 'dodol_biasa', 'name': 'Dodol Biasa', 'unit': 'kg'},
+    {'id': 'dodol_duren', 'name': 'Dodol Duren', 'unit': 'kg'},
   ];
 
   final Map<String, int> _cart = {};
-
-  double get _totalCartPrice => _menuItems.fold(0.0,
-      (sum, item) => sum + ((_cart[item['id']] ?? 0) * (item['price'] as int)));
 
   void _updateCart(String id, int delta) {
     setState(() {
@@ -424,9 +586,17 @@ class _OrderPageState extends State<OrderPage> {
     });
   }
 
+  List<Map<String, String>> _firebaseUsers = [];
+
   List<Map<String, String>> get _uniqueCustomers {
     final Map<String, String> customers = {};
-    // Urutkan pesanan dari yang terbaru agar mendapat data nama terupdate
+
+    // 1. Muat dari koleksi users Firebase (Prioritas Utama)
+    for (var user in _firebaseUsers) {
+      customers[user['phone']!] = user['name']!;
+    }
+
+    // 2. Gabungkan dengan pesanan lokal sebagai fallback data lama
     final sortedOrders = List<OrderItem>.from(_orders)
       ..sort((a, b) => b.orderDate.compareTo(a.orderDate));
 
@@ -447,11 +617,6 @@ class _OrderPageState extends State<OrderPage> {
   }
 
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy', 'id_ID');
-  final NumberFormat _currencyFormat = NumberFormat.currency(
-    locale: 'id_ID',
-    symbol: 'Rp',
-    decimalDigits: 0,
-  );
 
   @override
   void initState() {
@@ -461,7 +626,7 @@ class _OrderPageState extends State<OrderPage> {
 
     // Mulai mendengarkan perubahan Firestore secara real-time
     _ordersSubscription = FirebaseFirestore.instance
-        .collection('orders')
+        .collection(_kCollectionOrders)
         .snapshots()
         .listen((snapshot) {
       if (!mounted) return;
@@ -471,6 +636,26 @@ class _OrderPageState extends State<OrderPage> {
       setState(() {
         _orders.clear();
         _orders.addAll(updatedOrders);
+      });
+    });
+
+    // Mulai mendengarkan perubahan data users secara real-time
+    _usersSubscription = FirebaseFirestore.instance
+        .collection(_kCollectionUsers)
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
+      final List<Map<String, String>> users = [];
+      for (var doc in snapshot.docs) {
+        final data = doc.data();
+        final name = data['name'] as String?;
+        final phone = data['phone'] as String?;
+        if (name != null && phone != null && phone.trim().isNotEmpty) {
+          users.add({'name': name, 'phone': phone});
+        }
+      }
+      setState(() {
+        _firebaseUsers = users;
       });
     });
 
@@ -487,6 +672,7 @@ class _OrderPageState extends State<OrderPage> {
   @override
   void dispose() {
     _ordersSubscription?.cancel();
+    _usersSubscription?.cancel();
     _customerController.dispose();
     _phoneController.dispose();
     _searchController.dispose();
@@ -717,9 +903,6 @@ class _OrderPageState extends State<OrderPage> {
       .where((item) => !item.isPickedUp)
       .fold(0.0, (sum, item) => sum + item.actualWeightKg);
 
-  double get _totalRevenue =>
-      _filteredOrders.fold(0.0, (sum, item) => sum + item.totalPrice);
-
   int get _totalOrderCount => _filteredOrders.length;
   int get _totalCustomerCount => _groupedOrders.length;
 
@@ -729,9 +912,6 @@ class _OrderPageState extends State<OrderPage> {
   double _getRemainingWeightPerCustomer(List<OrderItem> items) => items
       .where((item) => !item.isPickedUp)
       .fold(0.0, (sum, item) => sum + item.actualWeightKg);
-
-  double _getTotalPricePerCustomer(List<OrderItem> items) =>
-      items.fold(0.0, (sum, item) => sum + item.totalPrice);
 
   Future<void> _pickDateRange() async {
     DateTime tempStart = _filterStartDate ?? DateTime.now();
@@ -774,88 +954,150 @@ class _OrderPageState extends State<OrderPage> {
               }
             }
 
-            return AlertDialog(
-              title: const Text('Filter Tanggal'),
-              content: SizedBox(
-                width: 520,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: pickStartDate,
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 400),
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.date_range_rounded,
+                              color: Colors.deepOrange, size: 28),
+                          SizedBox(width: 12),
+                          Text(
+                            'Filter Tanggal',
+                            style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      const Text('Mulai Dari',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey)),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: pickStartDate,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(16),
-                            child: InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: 'Dari',
-                                prefixIcon:
-                                    const Icon(Icons.date_range_outlined),
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16)),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
-                                ),
-                              ),
-                              child: Text(_dateFormat.format(tempStart)),
-                            ),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_today_rounded,
+                                  color: Colors.deepOrange, size: 20),
+                              const SizedBox(width: 12),
+                              Text(_dateFormat.format(tempStart),
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600)),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: InkWell(
-                            onTap: pickEndDate,
+                      ),
+                      const SizedBox(height: 16),
+                      const Text('Sampai Dengan',
+                          style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey)),
+                      const SizedBox(height: 8),
+                      InkWell(
+                        onTap: pickEndDate,
+                        borderRadius: BorderRadius.circular(16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade50,
                             borderRadius: BorderRadius.circular(16),
-                            child: InputDecorator(
-                              decoration: InputDecoration(
-                                labelText: 'Sampai',
-                                prefixIcon: const Icon(Icons.event_outlined),
-                                border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(16)),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide:
-                                      BorderSide(color: Colors.grey.shade300),
-                                ),
-                              ),
-                              child: Text(_dateFormat.format(tempEnd)),
-                            ),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.event_rounded,
+                                  color: Colors.deepOrange, size: 20),
+                              const SizedBox(width: 12),
+                              Text(_dateFormat.format(tempEnd),
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600)),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 32),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          TextButton(
+                            onPressed: () {
+                              setState(() {
+                                _filterStartDate = null;
+                                _filterEndDate = null;
+                              });
+                              Navigator.pop(context);
+                            },
+                            style: TextButton.styleFrom(
+                                foregroundColor: Colors.red.shade400),
+                            child: const Text('Reset',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                          Row(
+                            children: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                style: TextButton.styleFrom(
+                                    foregroundColor: Colors.black54),
+                                child: const Text('Batal'),
+                              ),
+                              const SizedBox(width: 8),
+                              FilledButton(
+                                onPressed: () {
+                                  setState(() {
+                                    _filterStartDate = tempStart;
+                                    _filterEndDate = tempEnd;
+                                  });
+                                  Navigator.pop(context);
+                                },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.deepOrange,
+                                  foregroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30)),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 24, vertical: 12),
+                                  elevation: 2,
+                                ),
+                                child: const Text('Terapkan',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.bold)),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _filterStartDate = null;
-                      _filterEndDate = null;
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Reset'),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Batal'),
-                ),
-                FilledButton(
-                  onPressed: () {
-                    setState(() {
-                      _filterStartDate = tempStart;
-                      _filterEndDate = tempEnd;
-                    });
-                    Navigator.pop(context);
-                  },
-                  child: const Text('Terapkan'),
-                ),
-              ],
             );
           },
         );
@@ -910,6 +1152,179 @@ class _OrderPageState extends State<OrderPage> {
         _pickupDate = picked;
       });
     }
+  }
+
+  Future<void> _showCustomerListPopup() async {
+    await showDialog(
+      context: context,
+      builder: (context) {
+        String searchQuery = '';
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final filteredCustomers = _uniqueCustomers.where((c) {
+              return c['name']!
+                      .toLowerCase()
+                      .contains(searchQuery.toLowerCase()) ||
+                  c['phone']!.contains(searchQuery);
+            }).toList();
+
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              surfaceTintColor: Colors.transparent,
+              child: ConstrainedBox(
+                constraints:
+                    const BoxConstraints(maxWidth: 400, maxHeight: 600),
+                child: Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.people_alt_outlined,
+                              color: Colors.deepOrange, size: 28),
+                          SizedBox(width: 12),
+                          Text(
+                            'Pilih Pelanggan',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        autofocus: true,
+                        onChanged: (val) =>
+                            setModalState(() => searchQuery = val),
+                        decoration: InputDecoration(
+                          hintText: 'Cari atau ketik nama baru...',
+                          prefixIcon:
+                              const Icon(Icons.search, color: Colors.grey),
+                          filled: true,
+                          fillColor: Colors.grey.shade50,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide:
+                                BorderSide(color: Colors.deepOrange.shade300),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: filteredCustomers.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.person_add_alt_1_outlined,
+                                        size: 48, color: Colors.grey.shade400),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'Pelanggan tidak ditemukan',
+                                      style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.grey.shade700),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Tambahkan "$searchQuery" sebagai pelanggan baru?',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          color: Colors.grey.shade500,
+                                          fontSize: 14),
+                                    ),
+                                    const SizedBox(height: 20),
+                                    FilledButton.icon(
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Colors.deepOrange,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(30)),
+                                      ),
+                                      onPressed: () {
+                                        _customerController.text = searchQuery;
+                                        _phoneController.clear();
+                                        Navigator.pop(context);
+                                      },
+                                      icon: const Icon(Icons.add, size: 18),
+                                      label: const Text('Gunakan Nama Ini',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold)),
+                                    )
+                                  ],
+                                ),
+                              )
+                            : ListView.separated(
+                                itemCount: filteredCustomers.length,
+                                separatorBuilder: (_, __) => Divider(
+                                    height: 1,
+                                    color: Colors.grey.shade100,
+                                    indent: 56),
+                                itemBuilder: (context, index) {
+                                  final c = filteredCustomers[index];
+                                  return ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 8, vertical: 4),
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
+                                    leading: CircleAvatar(
+                                      radius: 22,
+                                      backgroundColor:
+                                          Colors.deepOrange.shade50,
+                                      child: Text(
+                                        c['name']![0].toUpperCase(),
+                                        style: TextStyle(
+                                            color: Colors.deepOrange.shade700,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18),
+                                      ),
+                                    ),
+                                    title: Text(c['name']!,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                            color: Colors.black87)),
+                                    subtitle: Text(c['phone']!,
+                                        style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w500)),
+                                    onTap: () {
+                                      _customerController.text = c['name']!;
+                                      _phoneController.text = c['phone']!;
+                                      Navigator.pop(context);
+                                    },
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _addOrder() async {
@@ -989,14 +1404,13 @@ class _OrderPageState extends State<OrderPage> {
       resi: noResi,
       fcmToken: fcmToken,
       hasItems: true,
-      explicitTotalPrice: _totalCartPrice,
       items: _cart,
     );
 
     try {
       // Simpan ke Firestore menggunakan Nomor Resi sebagai ID Dokumen
       await FirebaseFirestore.instance
-          .collection('orders')
+          .collection(_kCollectionOrders)
           .doc(noResi)
           .set(newItem.toJson());
 
@@ -1005,7 +1419,7 @@ class _OrderPageState extends State<OrderPage> {
       // Daftarkan/Update data user ke collection 'users' agar bisa dipakai login di aplikasi client
       if (cleanPhone.isNotEmpty) {
         await FirebaseFirestore.instance
-            .collection('users')
+            .collection(_kCollectionUsers)
             .doc(cleanPhone)
             .set({
           'name': customerName,
@@ -1017,7 +1431,7 @@ class _OrderPageState extends State<OrderPage> {
       // Panggil API Vercel untuk Broadcast Notifikasi ke Semua Admin
       try {
         final response = await http.post(
-          Uri.parse('https://pesan-keranjang-backend.vercel.app/api/notify'),
+          Uri.parse(_kApiNotify),
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'customerName': newItem.customerName,
@@ -1228,7 +1642,7 @@ class _OrderPageState extends State<OrderPage> {
                     final updatedNotes = notesController.text.trim();
                     // Update spesifik dokumen di Firestore
                     await FirebaseFirestore.instance
-                        .collection('orders')
+                        .collection(_kCollectionOrders)
                         .doc(item.id)
                         .update({
                       'customerName': updatedName,
@@ -1256,7 +1670,10 @@ class _OrderPageState extends State<OrderPage> {
 
   Future<void> _deleteOrder(OrderItem item) async {
     // Hapus dari Firestore berdasarkan ID-nya
-    await FirebaseFirestore.instance.collection('orders').doc(item.id).delete();
+    await FirebaseFirestore.instance
+        .collection(_kCollectionOrders)
+        .doc(item.id)
+        .delete();
 
     _showSnackBar('Order berhasil dihapus.');
   }
@@ -1294,14 +1711,6 @@ class _OrderPageState extends State<OrderPage> {
                         ? 'Pesanan: ${item.weightKg.toInt()} item'
                         : 'Bobot: ${item.weightKg.toStringAsFixed(1)} kg',
                     style: const TextStyle(fontSize: 15)),
-                const SizedBox(height: 8),
-                Text(
-                  'Total: ${_currencyFormat.format(item.totalPrice)}',
-                  style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: Colors.green.shade700),
-                ),
                 if (item.notes != null && item.notes!.isNotEmpty) ...[
                   const SizedBox(height: 16),
                   Text(item.hasItems ? 'Rincian Pesanan:' : 'Catatan:',
@@ -1341,27 +1750,47 @@ class _OrderPageState extends State<OrderPage> {
     final qrData = 'Resi: ${item.resi ?? '-'}\n'
         'Nama: ${item.customerName}\n'
         '${item.hasItems ? "Item:" : "Bobot:"} ${item.hasItems ? "${item.weightKg.toInt()} item" : "${item.weightKg.toStringAsFixed(1)} kg"}\n'
-        'Total: ${_currencyFormat.format(item.totalPrice)}\n'
         'Tgl Ambil: ${_dateFormat.format(item.pickupDate)}';
 
     // 2. Tampilkan dalam bentuk Pop-up Dialog
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('QR Code Pesanan', textAlign: TextAlign.center),
-          content: SizedBox(
-            width: 320,
-            child: SingleChildScrollView(
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  const Text(
+                    'QR Code Pesanan',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 24),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 10,
+                          spreadRadius: 2,
+                        )
+                      ],
+                      border: Border.all(color: Colors.grey.shade200),
                     ),
                     child: SizedBox(
                       width: 200,
@@ -1374,46 +1803,81 @@ class _OrderPageState extends State<OrderPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 24),
                   Text(
                     item.customerName,
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 18),
+                        fontWeight: FontWeight.bold, fontSize: 22),
                     textAlign: TextAlign.center,
                   ),
-                  const SizedBox(height: 4),
-                  if (item.resi != null)
-                    Text(
-                      'No. Resi: ${item.resi}',
-                      style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.deepOrange.shade700,
-                          fontSize: 16),
+                  const SizedBox(height: 8),
+                  if (item.resi != null) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.deepOrange.shade50,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'No. Resi: ${item.resi}',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.deepOrange.shade800,
+                            fontSize: 14),
+                      ),
                     ),
+                    const SizedBox(height: 12),
+                  ],
                   Text(
-                    '${item.hasItems ? "${item.weightKg.toInt()} item" : "${item.weightKg.toStringAsFixed(1)} kg"} • ${_currencyFormat.format(item.totalPrice)}\nAmbil: ${_dateFormat.format(item.pickupDate)}',
-                    style: TextStyle(color: Colors.grey.shade700, fontSize: 14),
+                    '${item.hasItems ? "${item.weightKg.toInt()} item" : "${item.weightKg.toStringAsFixed(1)} kg"} • Ambil: ${_dateFormat.format(item.pickupDate)}',
+                    style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600),
                     textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 32),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.grey.shade700,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                        ),
+                        child: const Text('Tutup',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.deepOrange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 2,
+                        ),
+                        onPressed: () {
+                          Navigator.pop(
+                              context); // Tutup dialog sebelum proses print
+                          _printQrCode(item, qrData);
+                        },
+                        icon: const Icon(Icons.print, size: 18),
+                        label: const Text('Cetak',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Tutup'),
-            ),
-            FilledButton.icon(
-              onPressed: () {
-                Navigator.pop(context); // Tutup dialog sebelum proses print
-                _printQrCode(item, qrData);
-              },
-              icon: const Icon(Icons.print, size: 18),
-              label: const Text('Cetak'),
-            ),
-          ],
         );
       },
     );
@@ -1464,11 +1928,6 @@ class _OrderPageState extends State<OrderPage> {
                     item.hasItems
                         ? 'Item: ${item.weightKg.toInt()} item'
                         : 'Bobot: ${item.weightKg.toStringAsFixed(1)} kg',
-                    style: const pw.TextStyle(fontSize: 12),
-                  ),
-                  pw.SizedBox(height: 2),
-                  pw.Text(
-                    'Total: ${_currencyFormat.format(item.totalPrice)}',
                     style: const pw.TextStyle(fontSize: 12),
                   ),
                   pw.SizedBox(height: 2),
@@ -1527,7 +1986,8 @@ class _OrderPageState extends State<OrderPage> {
 
       // Operasi massal (Batch Write) Firestore
       final batch = FirebaseFirestore.instance.batch();
-      final collection = FirebaseFirestore.instance.collection('orders');
+      final collection =
+          FirebaseFirestore.instance.collection(_kCollectionOrders);
 
       // Hapus data lama di database (opsional: agar sesuai logika sebelumnya yg me-replace list)
       final oldDocs = await collection.get();
@@ -1570,7 +2030,6 @@ class _OrderPageState extends State<OrderPage> {
         'pickup_date',
         'weight_kg',
         'is_picked_up',
-        'total_price',
         'notes',
         'resi',
       ];
@@ -1653,21 +2112,12 @@ class _OrderPageState extends State<OrderPage> {
                 rowIndex: dataRow,
               ),
             )
-            .value = excel.DoubleCellValue(item.totalPrice);
-
-        sheet
-            .cell(
-              excel.CellIndex.indexByColumnRow(
-                columnIndex: 6,
-                rowIndex: dataRow,
-              ),
-            )
             .value = excel.TextCellValue(item.notes ?? '');
 
         sheet
             .cell(
               excel.CellIndex.indexByColumnRow(
-                columnIndex: 7,
+                columnIndex: 6,
                 rowIndex: dataRow,
               ),
             )
@@ -1855,7 +2305,7 @@ class _OrderPageState extends State<OrderPage> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withOpacity(0.06),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -1865,43 +2315,31 @@ class _OrderPageState extends State<OrderPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    LayoutBuilder(
-                      builder: (context, constraints) {
-                        return DropdownMenu<Map<String, String>>(
-                          width: constraints.maxWidth,
-                          controller: _customerController,
-                          enableFilter: true,
-                          requestFocusOnTap: true,
-                          leadingIcon: const Icon(Icons.person_outline),
-                          label: const Text('Nama Pelanggan'),
-                          hintText: 'Pilih atau ketik baru',
-                          inputDecorationTheme: InputDecorationTheme(
-                            filled: true,
-                            fillColor: Colors.grey.shade50,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 16),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                          dropdownMenuEntries: _uniqueCustomers.map((customer) {
-                            return DropdownMenuEntry<Map<String, String>>(
-                              value: customer,
-                              label: customer['name']!,
-                              trailingIcon: Text(customer['phone']!,
-                                  style: const TextStyle(
-                                      color: Colors.grey, fontSize: 13)),
-                            );
-                          }).toList(),
-                          onSelected: (Map<String, String>? customer) {
-                            if (customer != null) {
-                              _customerController.text = customer['name']!;
-                              _phoneController.text = customer['phone']!;
-                            }
-                          },
-                        );
-                      },
+                    TextField(
+                      controller: _customerController,
+                      readOnly: true,
+                      onTap: _showCustomerListPopup,
+                      decoration: InputDecoration(
+                        labelText: 'Nama Pelanggan',
+                        hintText: 'Pilih atau ketik baru',
+                        prefixIcon: const Icon(Icons.person_outline),
+                        suffixIcon: const Icon(Icons.arrow_drop_down),
+                        filled: true,
+                        fillColor: Colors.white,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: Colors.deepOrange.shade300),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 16),
                     TextField(
@@ -1912,10 +2350,19 @@ class _OrderPageState extends State<OrderPage> {
                         hintText: 'Contoh: 081234567890',
                         prefixIcon: const Icon(Icons.phone_outlined),
                         filled: true,
-                        fillColor: Colors.grey.shade50,
+                        fillColor: Colors.white,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: Colors.deepOrange.shade300),
                         ),
                       ),
                     ),
@@ -1928,10 +2375,19 @@ class _OrderPageState extends State<OrderPage> {
                           labelText: 'Tanggal Pengambilan',
                           prefixIcon: const Icon(Icons.event_available),
                           filled: true,
-                          fillColor: Colors.grey.shade50,
+                          fillColor: Colors.white,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey.shade200),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide:
+                                BorderSide(color: Colors.deepOrange.shade300),
                           ),
                         ),
                         child: Text(
@@ -1966,7 +2422,7 @@ class _OrderPageState extends State<OrderPage> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withOpacity(0.06),
                       blurRadius: 20,
                       offset: const Offset(0, 8),
                     ),
@@ -1997,8 +2453,7 @@ class _OrderPageState extends State<OrderPage> {
                                               fontSize: 15,
                                               color: Colors.black87)),
                                       const SizedBox(height: 4),
-                                      Text(
-                                          '${_currencyFormat.format(item['price'])} / ${item['unit']}',
+                                      Text('Satuan: ${item['unit']}',
                                           style: TextStyle(
                                               color: Colors.deepOrange.shade600,
                                               fontWeight: FontWeight.w500,
@@ -2006,29 +2461,38 @@ class _OrderPageState extends State<OrderPage> {
                                     ],
                                   ),
                                 ),
-                                if (qty == 0)
-                                  FilledButton.tonal(
+                                if (qty ==
+                                    0) // Tombol 'Tambah' jika item belum ada di keranjang
+                                  OutlinedButton.icon(
                                     onPressed: () => _updateCart(id, 1),
-                                    style: FilledButton.styleFrom(
-                                      backgroundColor:
-                                          Colors.deepOrange.shade50,
+                                    style: OutlinedButton.styleFrom(
                                       foregroundColor:
                                           Colors.deepOrange.shade700,
+                                      side: BorderSide(
+                                          color: Colors.deepOrange.shade200,
+                                          width: 1.5),
                                       shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12)),
-                                      minimumSize: const Size(80, 40),
-                                      padding: EdgeInsets.zero,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      minimumSize: const Size(90, 42),
                                     ),
-                                    child: const Text('Tambah',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.bold)),
+                                    icon: const Icon(Icons.add, size: 18),
+                                    label: const Text(
+                                      'Tambah',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                    ),
                                   )
-                                else
+                                else // Stepper (+/-) jika item sudah ada
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: Colors.grey.shade100,
                                       borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.grey.shade300,
+                                        width: 1.5,
+                                      ),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -2073,54 +2537,38 @@ class _OrderPageState extends State<OrderPage> {
                   ],
                 ),
               ),
-              if (_cart.isNotEmpty) ...[
-                const SizedBox(height: 32),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.deepOrange,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.deepOrange.withOpacity(0.3),
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Total Tagihan',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                              color: Colors.white)),
-                      Text(_currencyFormat.format(_totalCartPrice),
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 20,
-                              color: Colors.white)),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 32),
-              SizedBox(
+              const SizedBox(height: 24),
+              Container(
                 width: double.infinity,
-                height: 56,
-                child: FilledButton(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.deepOrange.withOpacity(0.25),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: FilledButton.icon(
                   style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     backgroundColor: Colors.deepOrange,
                     foregroundColor: Colors.white,
                     elevation: 0,
                   ),
                   onPressed: _addOrder,
-                  child: const Text(
+                  icon: const Icon(Icons.check_circle_outline, size: 20),
+                  label: const Text(
                     'Simpan Order',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
                   ),
                 ),
               ),
@@ -2248,131 +2696,311 @@ class _OrderPageState extends State<OrderPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Pesanan Ditemukan!', textAlign: TextAlign.center),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.check_circle_outline,
-                  color: Colors.green, size: 64),
-              const SizedBox(height: 16),
-              Text(
-                order.customerName,
-                style:
-                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade200),
-                ),
-                child: Column(
-                  children: [
-                    if (order.resi != null) ...[
-                      Text('No. Resi: ${order.resi}',
-                          style: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 16)),
-                      const SizedBox(height: 4),
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: order.isPickedUp
+                        ? Colors.green.shade50
+                        : Colors.deepOrange.shade50,
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(24)),
+                  ),
+                  child: Stack(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                order.isPickedUp
+                                    ? Icons.check_circle_outline
+                                    : Icons.warning_amber_rounded,
+                                color: order.isPickedUp
+                                    ? Colors.green
+                                    : Colors.deepOrange,
+                                size: 64,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                order.isPickedUp
+                                    ? 'Pesanan Sudah Diambil!'
+                                    : 'Pesanan Ditemukan!',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 22,
+                                  color: order.isPickedUp
+                                      ? Colors.green.shade800
+                                      : Colors.deepOrange.shade800,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      // Icon X untuk Tutup di pojok kiri
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        child: IconButton(
+                          icon: const Icon(Icons.close),
+                          color: order.isPickedUp
+                              ? Colors.green.shade800
+                              : Colors.deepOrange.shade800,
+                          onPressed: () {
+                            Navigator.pop(context);
+                            setState(() => _isScanning = true);
+                          },
+                        ),
+                      ),
                     ],
-                    Text(
-                        order.hasItems
-                            ? 'Jumlah Item: ${order.weightKg.toInt()} item'
-                            : 'Bobot: ${order.weightKg.toStringAsFixed(1)} kg',
-                        style: const TextStyle(fontSize: 15)),
-                    const SizedBox(height: 4),
-                    Text('Total: ${_currencyFormat.format(order.totalPrice)}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15)),
-                    const SizedBox(height: 4),
-                    Text('Tgl Ambil: ${_dateFormat.format(order.pickupDate)}',
-                        style: const TextStyle(fontSize: 15)),
-                  ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              if (order.isPickedUp)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                      color: Colors.red.shade50,
-                      borderRadius: BorderRadius.circular(8)),
-                  child: const Text('Status: SUDAH DIAMBIL',
-                      style: TextStyle(
-                          color: Colors.red, fontWeight: FontWeight.bold)),
-                )
-              else
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                      color: Colors.green.shade50,
-                      borderRadius: BorderRadius.circular(8)),
-                  child: const Text('Status: BELUM DIAMBIL',
-                      style: TextStyle(
-                          color: Colors.green, fontWeight: FontWeight.bold)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Text(
+                          order.customerName,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 22),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      if (order.resi != null) ...[
+                        const SizedBox(height: 8),
+                        Center(
+                          child: Text(
+                            'No. Resi: ${order.resi}',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 15,
+                                color: Colors.grey.shade600),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('TANGGAL AMBIL',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5)),
+                                const SizedBox(height: 4),
+                                Text(_dateFormat.format(order.pickupDate),
+                                    style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                    order.hasItems
+                                        ? 'JUMLAH ITEM'
+                                        : 'TOTAL BOBOT',
+                                    style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.5)),
+                                const SizedBox(height: 4),
+                                Text(
+                                    order.hasItems
+                                        ? '${order.weightKg.toInt()} Jenis'
+                                        : '${order.actualWeightKg.toStringAsFixed(1)} kg',
+                                    style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (order.hasItems &&
+                          order.items != null &&
+                          order.items!.isNotEmpty) ...[
+                        const Divider(height: 32),
+                        const Text(
+                          'Rincian Pesanan',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: order.items!.entries.map((entry) {
+                              final item = _menuItems.firstWhere(
+                                  (m) => m['id'] == entry.key,
+                                  orElse: () => {
+                                        'id': 'unknown',
+                                        'name': 'Item tidak dikenal',
+                                        'unit': 'pcs'
+                                      });
+                              final qty = (entry.value as num).toInt();
+                              final unit = item['unit'] as String;
+                              return Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 6.0),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      '• ${item['name']}',
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '$qty $unit',
+                                      style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 24),
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: order.isPickedUp
+                                ? Colors.green.shade100
+                                : Colors.deepOrange.shade100,
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          child: Text(
+                            'STATUS: ${order.isPickedUp ? "SUDAH DIAMBIL" : "BELUM DIAMBIL"}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              letterSpacing: 0.5,
+                              color: order.isPickedUp
+                                  ? Colors.green.shade800
+                                  : Colors.deepOrange.shade800,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
-            ],
-          ),
-          actionsAlignment: MainAxisAlignment.center,
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                setState(() => _isScanning = true); // Lanjut mode scan
-              },
-              child: const Text('Tutup'),
+                if (!order.isPickedUp)
+                  Container(
+                    padding: const EdgeInsets.all(24.0),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: const BorderRadius.vertical(
+                          bottom: Radius.circular(24)),
+                    ),
+                    child: Center(
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.black87,
+                          elevation: 6, // Memberikan efek pop-out 3D
+                          shadowColor: Colors.black45,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 32, vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        onPressed: () async {
+                          // Update ke Firestore
+                          await FirebaseFirestore.instance
+                              .collection(_kCollectionOrders)
+                              .doc(order.id)
+                              .update({'isPickedUp': true});
+
+                          // Kirim notifikasi pesanan selesai ke pelanggan
+                          if (order.fcmToken != null &&
+                              order.fcmToken!.isNotEmpty) {
+                            try {
+                              final response = await http.post(
+                                Uri.parse(_kApiNotifyCompleted),
+                                headers: {'Content-Type': 'application/json'},
+                                body: jsonEncode({
+                                  'customerName': order.customerName,
+                                  'resi': order.resi,
+                                  'fcmToken': order.fcmToken,
+                                }),
+                              );
+
+                              debugPrint(
+                                  'Vercel Response Code: ${response.statusCode}');
+                              debugPrint(
+                                  'Vercel Response Body: ${response.body}');
+                            } catch (e) {
+                              debugPrint('API Request Error: $e');
+                            }
+                          } else {
+                            debugPrint(
+                                '⚠️ FCM Token kosong! Pesanan ini mungkin dibuat manual oleh admin.');
+                          }
+
+                          setState(() {
+                            _selectedIndex = 2; // Pindah ke tab daftar order
+                          });
+                          if (context.mounted) Navigator.pop(context);
+                          _showSnackBar(
+                              'Order atas nama ${order.customerName} ditandai SUDAH DIAMBIL.');
+                          setState(() => _isScanning = true);
+                        },
+                        icon:
+                            const Icon(Icons.check_circle, color: Colors.green),
+                        label: const Text(
+                          'Tandai Selesai',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  const SizedBox(
+                      height:
+                          16), // Jarak estetik saat state order sudah diambil
+              ],
             ),
-            if (!order.isPickedUp)
-              FilledButton.icon(
-                onPressed: () async {
-                  // Update ke Firestore
-                  await FirebaseFirestore.instance
-                      .collection('orders')
-                      .doc(order.id)
-                      .update({'isPickedUp': true});
-
-                  // Kirim notifikasi pesanan selesai ke pelanggan
-                  if (order.fcmToken != null && order.fcmToken!.isNotEmpty) {
-                    try {
-                      final response = await http.post(
-                        Uri.parse(
-                            'https://pesan-keranjang-backend.vercel.app/api/notify_completed'),
-                        headers: {'Content-Type': 'application/json'},
-                        body: jsonEncode({
-                          'customerName': order.customerName,
-                          'resi': order.resi,
-                          'fcmToken': order.fcmToken,
-                        }),
-                      );
-
-                      debugPrint(
-                          'Vercel Response Code: ${response.statusCode}');
-                      debugPrint('Vercel Response Body: ${response.body}');
-                    } catch (e) {
-                      debugPrint('API Request Error: $e');
-                    }
-                  } else {
-                    debugPrint(
-                        '⚠️ FCM Token kosong! Pesanan ini mungkin dibuat manual oleh admin.');
-                  }
-
-                  setState(() {
-                    _selectedIndex = 2; // Pindah ke tab daftar order
-                  });
-                  if (context.mounted) Navigator.pop(context);
-                  _showSnackBar(
-                      'Order atas nama ${order.customerName} ditandai SUDAH DIAMBIL.');
-                  setState(() => _isScanning = true);
-                },
-                icon: const Icon(Icons.check),
-                label: const Text('Tandai Selesai'),
-              ),
-          ],
+          ),
         );
       },
     );
@@ -2395,33 +3023,38 @@ class _OrderPageState extends State<OrderPage> {
             }
           },
         ),
-        Center(
-          child: Container(
-            width: 250,
-            height: 250,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.deepOrange, width: 4),
-              borderRadius: BorderRadius.circular(24),
-            ),
-          ),
-        ),
+        const ScannerOverlay(),
         Positioned(
           bottom: 80,
           left: 0,
           right: 0,
           child: Center(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(20),
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: const Text(
-                'Arahkan kamera ke QR Code Pesanan',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.qr_code_scanner, color: Colors.white, size: 20),
+                  SizedBox(width: 12),
+                  Text(
+                    'Arahkan kamera ke QR Code',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600),
+                  ),
+                ],
               ),
             ),
           ),
@@ -2477,7 +3110,7 @@ class _OrderPageState extends State<OrderPage> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
+                      color: Colors.black.withOpacity(0.06),
                       blurRadius: 24,
                       offset: const Offset(0, 8),
                     ),
@@ -2540,10 +3173,11 @@ class _OrderPageState extends State<OrderPage> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        _buildQuickFilterBtn('Hari ini', _setToday),
-                        _buildQuickFilterBtn('Bulan ini', _setThisMonth),
-                        _buildQuickFilterBtn('7 Hari', _setLast7Days),
-                        _buildQuickFilterBtn('Semua', _clearFilter),
+                        _QuickFilterBtn(label: 'Hari ini', onTap: _setToday),
+                        _QuickFilterBtn(
+                            label: 'Bulan ini', onTap: _setThisMonth),
+                        _QuickFilterBtn(label: '7 Hari', onTap: _setLast7Days),
+                        _QuickFilterBtn(label: 'Semua', onTap: _clearFilter),
                       ],
                     ),
                   ],
@@ -2553,7 +3187,7 @@ class _OrderPageState extends State<OrderPage> {
               Row(
                 children: [
                   Expanded(
-                    child: _summaryCard(
+                    child: _SummaryCard(
                       title: 'Customer',
                       value: '$_totalCustomerCount',
                       icon: Icons.group,
@@ -2561,7 +3195,7 @@ class _OrderPageState extends State<OrderPage> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _summaryCard(
+                    child: _SummaryCard(
                       title: 'Total Order',
                       value: '$_totalOrderCount',
                       icon: Icons.receipt_long,
@@ -2574,7 +3208,7 @@ class _OrderPageState extends State<OrderPage> {
               Row(
                 children: [
                   Expanded(
-                    child: _summaryCard(
+                    child: _SummaryCard(
                         title: 'Total Bobot',
                         value: '${_totalOrderedWeight.toStringAsFixed(1)} kg',
                         icon: Icons.inventory_2,
@@ -2582,7 +3216,7 @@ class _OrderPageState extends State<OrderPage> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: _summaryCard(
+                    child: _SummaryCard(
                       title: 'Sisa Pesanan',
                       value: '${_remainingWeight.toStringAsFixed(1)} kg',
                       icon: Icons.pending_actions,
@@ -2590,14 +3224,6 @@ class _OrderPageState extends State<OrderPage> {
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              _summaryCard(
-                title: 'Estimasi Pendapatan',
-                value: _currencyFormat.format(_totalRevenue),
-                icon: Icons.payments,
-                color: Colors.green,
-                fullWidth: true,
               ),
               const SizedBox(height: 40),
               const Text(
@@ -2643,7 +3269,13 @@ class _OrderPageState extends State<OrderPage> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.black12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
                   ),
                   child: const Text(
                     'Belum ada order pada rentang tanggal yang dipilih.',
@@ -2658,17 +3290,22 @@ class _OrderPageState extends State<OrderPage> {
                     final allPickedUp = items.every((i) => i.isPickedUp);
 
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
+                      margin: const EdgeInsets.only(bottom: 16),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         color:
                             allPickedUp ? Colors.green.shade50 : Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: allPickedUp
-                              ? Colors.green.shade400
-                              : Colors.grey.shade300,
-                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.06),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                        border: allPickedUp
+                            ? Border.all(color: Colors.green.shade400)
+                            : null,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2852,29 +3489,6 @@ class _OrderPageState extends State<OrderPage> {
                                                   ),
                                                 ],
                                               ),
-                                              Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.end,
-                                                children: [
-                                                  const Text('Total Harga',
-                                                      style: TextStyle(
-                                                          fontSize: 12,
-                                                          color:
-                                                              Colors.black54)),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    _currencyFormat.format(
-                                                        item.totalPrice),
-                                                    style: TextStyle(
-                                                      fontSize: 18,
-                                                      fontWeight:
-                                                          FontWeight.w900,
-                                                      color:
-                                                          Colors.green.shade700,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
                                             ],
                                           ),
                                         ],
@@ -2895,7 +3509,7 @@ class _OrderPageState extends State<OrderPage> {
                                           final newStatus = !item.isPickedUp;
                                           // Update toggle di Firestore
                                           await FirebaseFirestore.instance
-                                              .collection('orders')
+                                              .collection(_kCollectionOrders)
                                               .doc(item.id)
                                               .update(
                                                   {'isPickedUp': newStatus});
@@ -2908,7 +3522,7 @@ class _OrderPageState extends State<OrderPage> {
                                                 final response =
                                                     await http.post(
                                                   Uri.parse(
-                                                      'https://pesan-keranjang-backend.vercel.app/api/notify_completed'),
+                                                      _kApiNotifyCompleted),
                                                   headers: {
                                                     'Content-Type':
                                                         'application/json'
@@ -3065,89 +3679,14 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
-  Widget _buildQuickFilterBtn(String label, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade700,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _summaryCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    Color? color,
-    bool fullWidth = false,
-  }) {
-    return Card(
-      elevation: 0,
-      color: color?.withOpacity(0.1) ?? Colors.blue.withOpacity(0.1),
-      shape: RoundedRectangleBorder(
-        side: BorderSide(
-          color: color?.withOpacity(0.3) ?? Colors.blue.withOpacity(0.3),
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, color: color ?? Colors.blue, size: 32),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: color?.withOpacity(0.8) ?? Colors.blue.shade700,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: fullWidth ? 20 : 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildCustomBottomNav() {
     return Container(
-      padding: const EdgeInsets.only(bottom: 12, top: 8),
+      padding: const EdgeInsets.only(bottom: 12, top: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withOpacity(0.06),
             blurRadius: 24,
             offset: const Offset(0, -4),
           ),
@@ -3157,59 +3696,31 @@ class _OrderPageState extends State<OrderPage> {
       child: SafeArea(
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
-          crossAxisAlignment: CrossAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            _buildNavItem(0, Icons.add_shopping_cart_outlined,
-                Icons.add_shopping_cart, 'Input Order'),
-            _buildCenterNavItem(1, Icons.qr_code_scanner_outlined,
-                Icons.qr_code_scanner, 'Scan QR'),
-            _buildNavItem(
-                2, Icons.list_alt_outlined, Icons.list_alt, 'Daftar Order'),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavItem(
-      int index, IconData icon, IconData activeIcon, String label) {
-    final isSelected = _selectedIndex == index;
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedIndex = index;
-            if (index == 1) _isScanning = true;
-          });
-        },
-        splashColor: Colors.transparent,
-        highlightColor: Colors.transparent,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              decoration: BoxDecoration(
-                color:
-                    isSelected ? Colors.deepOrange.shade50 : Colors.transparent,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Icon(
-                isSelected ? activeIcon : icon,
-                color: isSelected ? Colors.deepOrange : Colors.grey.shade400,
-                size: 26,
-              ),
+            _CustomBottomNavItem(
+              index: 0,
+              selectedIndex: _selectedIndex,
+              icon: Icons.add_shopping_cart_outlined,
+              activeIcon: Icons.add_shopping_cart,
+              label: 'Input Order',
+              onTap: _onNavItemTapped,
             ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected ? Colors.deepOrange : Colors.grey.shade500,
-              ),
+            _CustomBottomNavItem(
+              index: 1,
+              selectedIndex: _selectedIndex,
+              icon: Icons.qr_code_scanner_outlined,
+              activeIcon: Icons.qr_code_scanner,
+              label: 'Scan QR',
+              onTap: _onNavItemTapped,
+            ),
+            _CustomBottomNavItem(
+              index: 2,
+              selectedIndex: _selectedIndex,
+              icon: Icons.list_alt_outlined,
+              activeIcon: Icons.list_alt,
+              label: 'Daftar Order',
+              onTap: _onNavItemTapped,
             ),
           ],
         ),
@@ -3217,61 +3728,21 @@ class _OrderPageState extends State<OrderPage> {
     );
   }
 
-  Widget _buildCenterNavItem(
-      int index, IconData icon, IconData activeIcon, String label) {
-    final isSelected = _selectedIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () {
-          setState(() {
-            _selectedIndex = index;
-            if (index == 1) _isScanning = true;
-          });
-        },
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.deepOrange,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color:
-                        Colors.deepOrange.withOpacity(isSelected ? 0.4 : 0.2),
-                    blurRadius: isSelected ? 12 : 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Icon(
-                isSelected ? activeIcon : icon,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.deepOrange : Colors.black87,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _onNavItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+      if (index == 1) _isScanning = true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shadowColor: Colors.black.withOpacity(0.06),
+        elevation: 8,
         title: const Text(
           'Pesan Keranjang',
           style:
@@ -3326,6 +3797,180 @@ class _OrderPageState extends State<OrderPage> {
   }
 }
 
+class ScannerOverlay extends StatefulWidget {
+  const ScannerOverlay({super.key});
+
+  @override
+  State<ScannerOverlay> createState() => _ScannerOverlayState();
+}
+
+class _ScannerOverlayState extends State<ScannerOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+
+  @override
+  void initState() {
+    super.initState();
+    // Animasi diperlambat sedikit agar lebih smooth
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 2500),
+      vsync: this,
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const double scanAreaSize = 280.0;
+
+    return Stack(
+      children: [
+        // Overlay gelap dengan area transparan (cutout) di tengah
+        SizedBox.expand(
+          child: CustomPaint(
+            painter: ScannerOverlayPainter(scanAreaSize: scanAreaSize),
+          ),
+        ),
+        // Bingkai Scanner (Gaya bracket/sudut) dan Garis Laser Animasi
+        Center(
+          child: SizedBox(
+            width: scanAreaSize,
+            height: scanAreaSize,
+            child: Stack(
+              children: [
+                // Sudut/bingkai scanner
+                CustomPaint(
+                  size: const Size(scanAreaSize, scanAreaSize),
+                  painter: ScannerBorderPainter(),
+                ),
+                // Laser Line Animasi
+                AnimatedBuilder(
+                  animation: _animationController,
+                  builder: (context, child) {
+                    // Animasi bergerak naik turun dengan efek easing bawaan
+                    final curvedValue = Curves.easeInOutSine
+                        .transform(_animationController.value);
+                    final topOffset = 20.0;
+                    final bottomOffset = 20.0;
+                    final range = scanAreaSize - topOffset - bottomOffset;
+                    final currentY = topOffset + (curvedValue * range);
+
+                    return Positioned(
+                      top: currentY,
+                      left: 16,
+                      right: 16,
+                      child: Container(
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.deepOrange.withOpacity(0.8),
+                              blurRadius: 12,
+                              spreadRadius: 3,
+                            ),
+                            BoxShadow(
+                              color: Colors.deepOrange.withOpacity(0.4),
+                              blurRadius: 24,
+                              spreadRadius: 6,
+                            ),
+                          ],
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class ScannerBorderPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.deepOrange
+      ..strokeWidth = 4
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    const double cornerLength = 40.0;
+    const double radius = 20.0;
+
+    final path = Path();
+
+    // Kiri Atas
+    path.moveTo(0, cornerLength);
+    path.lineTo(0, radius);
+    path.quadraticBezierTo(0, 0, radius, 0);
+    path.lineTo(cornerLength, 0);
+
+    // Kanan Atas
+    path.moveTo(size.width - cornerLength, 0);
+    path.lineTo(size.width - radius, 0);
+    path.quadraticBezierTo(size.width, 0, size.width, radius);
+    path.lineTo(size.width, cornerLength);
+
+    // Kiri Bawah
+    path.moveTo(0, size.height - cornerLength);
+    path.lineTo(0, size.height - radius);
+    path.quadraticBezierTo(0, size.height, radius, size.height);
+    path.lineTo(cornerLength, size.height);
+
+    // Kanan Bawah
+    path.moveTo(size.width - cornerLength, size.height);
+    path.lineTo(size.width - radius, size.height);
+    path.quadraticBezierTo(
+        size.width, size.height, size.width, size.height - radius);
+    path.lineTo(size.width, size.height - cornerLength);
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class ScannerOverlayPainter extends CustomPainter {
+  final double scanAreaSize;
+
+  ScannerOverlayPainter({required this.scanAreaSize});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.black.withOpacity(0.65); // Lebih gelap agar fokus
+
+    final cutoutRect = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height / 2),
+      width: scanAreaSize,
+      height: scanAreaSize,
+    );
+
+    // PathFillType.evenOdd melubangi area yang tumpang tindih
+    final path = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height))
+      ..addRRect(
+          RRect.fromRectAndRadius(cutoutRect, const Radius.circular(20)));
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 class ReminderPage extends StatelessWidget {
   final List<OrderItem> upcomingOrders;
 
@@ -3338,10 +3983,12 @@ class ReminderPage extends StatelessWidget {
     final dateFormat = DateFormat('dd MMMM yyyy', 'id_ID');
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFF8F3), // Match app's background
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.white,
+        shadowColor: Colors.black.withOpacity(0.06),
+        elevation: 8,
         foregroundColor: Colors.black87,
         title: const Text(
           'Pengingat Pesanan',
@@ -3409,8 +4056,8 @@ class ReminderPage extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.04),
-                        blurRadius: 12,
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 16,
                         offset: const Offset(0, 4),
                       ),
                     ],
